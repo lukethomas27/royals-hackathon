@@ -7,7 +7,7 @@ import {
   DEFAULT_CONFIG,
   SimulationConfig,
 } from "@/lib/simulation";
-import { GameData, GameIndex, HeatState } from "@/lib/types";
+import { GameData, GameIndex, HeatState, SimulationStats } from "@/lib/types";
 
 export default function Home() {
   const [gameIndex, setGameIndex] = useState<GameIndex | null>(null);
@@ -16,6 +16,8 @@ export default function Home() {
   const [simTime, setSimTime] = useState<string>("");
   const [progress, setProgress] = useState<number>(0);
   const [isRunning, setIsRunning] = useState(false);
+  const [stats, setStats] = useState<SimulationStats | null>(null);
+  const [speed, setSpeed] = useState<number>(120);
   const engineRef = useRef<SimulationEngine | null>(null);
 
   useEffect(() => {
@@ -33,10 +35,11 @@ export default function Home() {
   }, []);
 
   const handleUpdate = useCallback(
-    (heat: HeatState, time: string, prog: number) => {
+    (heat: HeatState, time: string, prog: number, newStats: SimulationStats) => {
       setHeatState(heat);
       setSimTime(time);
       setProgress(prog);
+      setStats(newStats);
       if (prog >= 1) {
         setIsRunning(false);
       }
@@ -56,7 +59,7 @@ export default function Home() {
 
     const config: SimulationConfig = {
       ...DEFAULT_CONFIG,
-      speedMultiplier: 120,
+      speedMultiplier: speed,
     };
 
     const engine = new SimulationEngine(
@@ -121,6 +124,29 @@ export default function Home() {
             </option>
           ))}
         </select>
+
+        {/* Speed control */}
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs text-slate-400">Speed</span>
+          <div className="flex gap-1">
+            {[30, 60, 120, 240].map((s) => (
+              <button
+                key={s}
+                onClick={() => setSpeed(s)}
+                disabled={isRunning}
+                className="px-2.5 py-1 rounded text-xs font-mono"
+                style={{
+                  backgroundColor: speed === s ? "#c5a94e" : "#1e293b",
+                  color: speed === s ? "#1a2744" : "#94a3b8",
+                  borderWidth: 1,
+                  borderColor: speed === s ? "#c5a94e" : "#334155",
+                }}
+              >
+                {s}x
+              </button>
+            ))}
+          </div>
+        </div>
 
         <button
           onClick={isRunning ? stopSimulation : startSimulation}
