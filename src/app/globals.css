@@ -1,11 +1,189 @@
 @import "tailwindcss";
 
-body {
-  background-color: #0a0a1a;
-  color: #e2e8f0;
-  font-family: system-ui, -apple-system, sans-serif;
+/* ══════════════════════════════════════════════
+   THEME SYSTEM — Light / Dark / System
+   ══════════════════════════════════════════════ */
+
+/* ── Light theme (default) ── */
+:root {
+  --bg-body: #f4f1ec;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f8f6f2;
+  --bg-input: #ffffff;
+
+  --text-primary: #1a1a2e;
+  --text-secondary: #5a5a72;
+  --text-tertiary: #8a8a9a;
+  --text-inverted: #ffffff;
+
+  --border-default: #d8d4cc;
+  --border-subtle: #e8e4dc;
+
+  --accent-gold: #b8972e;
+  --accent-gold-dim: #9a7d24;
+  --accent-gold-bg: rgba(184, 151, 46, 0.1);
+
+  /* Arena map tokens */
+  --arena-concourse: #e8e2d6;
+  --arena-concourse-stroke: #d0c9ba;
+  --arena-concourse-line: #d4cdbf;
+  --arena-bowl: #ddd8cc;
+  --arena-bowl-stroke: #c8c0b0;
+  --arena-tier-line: #c8c0b0;
+  --arena-section-text: #9a9080;
+  --arena-boards: #2a2a3a;
+  --arena-boards-inner: #555;
+  --arena-shadow-opacity: 0.15;
+
+  --arena-node-stroke: rgba(0, 0, 0, 0.25);
+  --arena-node-label: #5a5a72;
+  --arena-node-section: #8a8a9a;
+  --arena-badge-bg: #ffffff;
+  --arena-badge-stroke: #b8972e;
+  --arena-badge-text: #8a6d1a;
+  --arena-connector-opacity: 0.2;
+
+  --legend-text: #8a8a9a;
+
+  --btn-bg: #e8e4dc;
+  --btn-text: #5a5a72;
+  --btn-border: #d8d4cc;
+  --btn-active-bg: var(--accent-gold);
+  --btn-active-text: #ffffff;
+  --btn-active-border: var(--accent-gold);
+
+  --panel-bg: #ffffff;
+  --panel-border: #e8e4dc;
+
+  --heat-bar-bg: #e8e4dc;
+  --progress-bg: #e8e4dc;
+
+  color-scheme: light;
 }
 
+/* ── Dark theme ── */
+[data-theme="dark"] {
+  --bg-body: #0a0a1a;
+  --bg-surface: #111827;
+  --bg-elevated: #1e293b;
+  --bg-input: #1e293b;
+
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #64748b;
+  --text-inverted: #1a2744;
+
+  --border-default: #334155;
+  --border-subtle: #1e293b;
+
+  --accent-gold: #c5a94e;
+  --accent-gold-dim: #8b7a3e;
+  --accent-gold-bg: rgba(197, 169, 78, 0.1);
+
+  --arena-concourse: #0e1a2e;
+  --arena-concourse-stroke: #1a2d4a;
+  --arena-concourse-line: #1a2d4a;
+  --arena-bowl: #14203a;
+  --arena-bowl-stroke: #243554;
+  --arena-tier-line: #1e3250;
+  --arena-section-text: #3d5a80;
+  --arena-boards: #f5f5f0;
+  --arena-boards-inner: #d4dce8;
+  --arena-shadow-opacity: 0.6;
+
+  --arena-node-stroke: rgba(255, 255, 255, 0.8);
+  --arena-node-label: #8da4c2;
+  --arena-node-section: #4a6485;
+  --arena-badge-bg: #0f172a;
+  --arena-badge-stroke: #c5a94e;
+  --arena-badge-text: #c5a94e;
+  --arena-connector-opacity: 0.25;
+
+  --legend-text: #94a3b8;
+
+  --btn-bg: #1e293b;
+  --btn-text: #94a3b8;
+  --btn-border: #334155;
+  --btn-active-bg: #c5a94e;
+  --btn-active-text: #1a2744;
+  --btn-active-border: #c5a94e;
+
+  --panel-bg: #111827;
+  --panel-border: #1e293b;
+
+  --heat-bar-bg: #334155;
+  --progress-bg: #334155;
+
+  color-scheme: dark;
+}
+
+/* System preference: apply dark when no explicit data-theme and system prefers dark */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-body: #0a0a1a;
+    --bg-surface: #111827;
+    --bg-elevated: #1e293b;
+    --bg-input: #1e293b;
+
+    --text-primary: #e2e8f0;
+    --text-secondary: #94a3b8;
+    --text-tertiary: #64748b;
+    --text-inverted: #1a2744;
+
+    --border-default: #334155;
+    --border-subtle: #1e293b;
+
+    --accent-gold: #c5a94e;
+    --accent-gold-dim: #8b7a3e;
+    --accent-gold-bg: rgba(197, 169, 78, 0.1);
+
+    --arena-concourse: #0e1a2e;
+    --arena-concourse-stroke: #1a2d4a;
+    --arena-concourse-line: #1a2d4a;
+    --arena-bowl: #14203a;
+    --arena-bowl-stroke: #243554;
+    --arena-tier-line: #1e3250;
+    --arena-section-text: #3d5a80;
+    --arena-boards: #f5f5f0;
+    --arena-boards-inner: #d4dce8;
+    --arena-shadow-opacity: 0.6;
+
+    --arena-node-stroke: rgba(255, 255, 255, 0.8);
+    --arena-node-label: #8da4c2;
+    --arena-node-section: #4a6485;
+    --arena-badge-bg: #0f172a;
+    --arena-badge-stroke: #c5a94e;
+    --arena-badge-text: #c5a94e;
+    --arena-connector-opacity: 0.25;
+
+    --legend-text: #94a3b8;
+
+    --btn-bg: #1e293b;
+    --btn-text: #94a3b8;
+    --btn-border: #334155;
+    --btn-active-bg: #c5a94e;
+    --btn-active-text: #1a2744;
+    --btn-active-border: #c5a94e;
+
+    --panel-bg: #111827;
+    --panel-border: #1e293b;
+
+    --heat-bar-bg: #334155;
+    --progress-bg: #334155;
+
+    color-scheme: dark;
+  }
+}
+
+/* ── Base ── */
+body {
+  background-color: var(--bg-body);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ── Animations ── */
 @keyframes pulse-glow {
   0%, 100% { opacity: 0.3; transform: scale(1); }
   50% { opacity: 0.6; transform: scale(1.15); }
@@ -14,4 +192,9 @@ body {
 @keyframes pulse-ring {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
+}
+
+@keyframes node-enter {
+  0% { transform: scale(0.8); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
 }

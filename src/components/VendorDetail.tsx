@@ -17,7 +17,6 @@ function heatLabel(heat: number): { text: string; color: string } {
   return { text: "Very busy", color: "#ef4444" };
 }
 
-// Group fan-friendly category labels for display
 function fanCategory(dataCategory: string): string {
   switch (dataCategory) {
     case "Food": return "Food";
@@ -37,7 +36,6 @@ export default function VendorDetail({ name, shortLabel, heat, items, onClose }:
   const waitMin = estimateWaitMinutes(heat);
   const status = heatLabel(heat);
 
-  // Group items by fan category
   const grouped: Record<string, MenuItem[]> = {};
   for (const item of items) {
     const cat = fanCategory(item.category);
@@ -45,7 +43,6 @@ export default function VendorDetail({ name, shortLabel, heat, items, onClose }:
     grouped[cat].push(item);
   }
 
-  // Order categories: Food first, then Beer, Drinks, Non-Alcoholic, Snacks, Sweets
   const categoryOrder = ["Food", "Beer", "Drinks", "Non-Alcoholic", "Snacks", "Sweets"];
   const sortedCategories = Object.keys(grouped).sort((a, b) => {
     const ai = categoryOrder.indexOf(a);
@@ -59,28 +56,32 @@ export default function VendorDetail({ name, shortLabel, heat, items, onClose }:
       onClick={onClose}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60" />
+      <div className="absolute inset-0 bg-black/50" />
 
       {/* Panel */}
       <div
         className="relative w-full max-w-md rounded-t-2xl px-5 pt-4 pb-6 max-h-[75vh] overflow-y-auto"
-        style={{ backgroundColor: "#111827" }}
+        style={{
+          backgroundColor: "var(--panel-bg)",
+          borderTop: "1px solid var(--panel-border)",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drag handle */}
         <div className="flex justify-center mb-3">
-          <div className="w-10 h-1 rounded-full bg-slate-600" />
+          <div className="w-10 h-1 rounded-full" style={{ backgroundColor: "var(--border-default)" }} />
         </div>
 
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-lg font-bold text-white">{name}</h2>
-            <p className="text-xs text-slate-400">{shortLabel}</p>
+            <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{name}</h2>
+            <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>{shortLabel}</p>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white text-xl leading-none p-1"
+            className="text-xl leading-none p-1"
+            style={{ color: "var(--text-tertiary)" }}
           >
             &times;
           </button>
@@ -89,7 +90,7 @@ export default function VendorDetail({ name, shortLabel, heat, items, onClose }:
         {/* Status bar */}
         <div
           className="flex items-center justify-between rounded-lg px-4 py-3 mb-4"
-          style={{ backgroundColor: "#1e293b" }}
+          style={{ backgroundColor: "var(--bg-elevated)" }}
         >
           <div className="flex items-center gap-2">
             <div
@@ -100,14 +101,14 @@ export default function VendorDetail({ name, shortLabel, heat, items, onClose }:
               {status.text}
             </span>
           </div>
-          <span className="text-sm text-slate-300">
+          <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
             ~{waitMin} min wait
           </span>
         </div>
 
         {/* Heat bar */}
         <div className="mb-5">
-          <div className="h-2 rounded-full bg-slate-700 overflow-hidden">
+          <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: "var(--heat-bar-bg)" }}>
             <div
               className="h-full rounded-full"
               style={{
@@ -120,21 +121,22 @@ export default function VendorDetail({ name, shortLabel, heat, items, onClose }:
         </div>
 
         {/* Menu */}
-        <h3 className="text-sm font-semibold text-slate-300 mb-3">Menu</h3>
+        <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--text-secondary)" }}>Menu</h3>
         {sortedCategories.map((cat) => (
           <div key={cat} className="mb-3">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wider mb-1.5"
+              style={{ color: "var(--text-tertiary)" }}>
               {cat}
             </p>
             {grouped[cat].map((item) => (
               <div
                 key={item.name}
                 className="flex justify-between py-1.5 border-b"
-                style={{ borderColor: "#1e293b" }}
+                style={{ borderColor: "var(--border-subtle)" }}
               >
-                <span className="text-sm text-slate-200">{item.name}</span>
+                <span className="text-sm" style={{ color: "var(--text-primary)" }}>{item.name}</span>
                 {item.price > 0 && (
-                  <span className="text-sm text-slate-400">
+                  <span className="text-sm" style={{ color: "var(--text-tertiary)" }}>
                     ${item.price.toFixed(2)}
                   </span>
                 )}
@@ -143,7 +145,7 @@ export default function VendorDetail({ name, shortLabel, heat, items, onClose }:
           </div>
         ))}
 
-        <p className="text-[10px] text-slate-600 mt-3 text-center">
+        <p className="text-[10px] mt-3 text-center" style={{ color: "var(--text-tertiary)" }}>
           Prices are estimates. Wait time based on historical data.
         </p>
       </div>

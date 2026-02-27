@@ -18,9 +18,11 @@ export default function CategoryFilter({ selected, onChange }: CategoryFilterPro
             onClick={() => onChange(opt.value)}
             className="px-4 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap shrink-0"
             style={{
-              backgroundColor: isActive ? "#c5a94e" : "#1e293b",
-              color: isActive ? "#1a2744" : "#94a3b8",
-              border: isActive ? "1px solid #c5a94e" : "1px solid #334155",
+              backgroundColor: isActive ? "var(--btn-active-bg)" : "var(--btn-bg)",
+              color: isActive ? "var(--btn-active-text)" : "var(--btn-text)",
+              border: isActive
+                ? "1px solid var(--btn-active-border)"
+                : "1px solid var(--btn-border)",
               transition: "all 0.2s",
             }}
           >
