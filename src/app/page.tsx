@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import ArenaMap from "@/components/ArenaMap";
 import CategoryFilter from "@/components/CategoryFilter";
 import VendorDetail from "@/components/VendorDetail";
+import BestTimeCard from "@/components/DemandTimeline";
 import {
   SimulationEngine,
   DEFAULT_CONFIG,
@@ -12,6 +13,7 @@ import {
 import { GameData, GameIndex, HeatState, SimulationStats, Transaction } from "@/lib/types";
 import { FanCategory, getDataCategories, getActiveLocations } from "@/lib/categories";
 import { buildVendorMenu, MenuItem } from "@/lib/vendorMenu";
+import { findBestTimes } from "@/lib/demandTimeline";
 
 // Lookup table for concession display names
 const VENDOR_NAMES: Record<string, { label: string; shortLabel: string }> = {
@@ -34,6 +36,7 @@ export default function Home() {
   const [speed, setSpeed] = useState<number>(120);
   const [selectedCategory, setSelectedCategory] = useState<FanCategory>("all");
   const [selectedVendor, setSelectedVendor] = useState<string | null>(null);
+  const [txVersion, setTxVersion] = useState(0);
   const engineRef = useRef<SimulationEngine | null>(null);
   const gameTransactions = useRef<Transaction[]>([]);
 
@@ -69,6 +72,22 @@ export default function Home() {
     return buildVendorMenu(gameTransactions.current, selectedVendor).items;
   }, [selectedVendor]);
 
+  // Compute best/worst times based on selected category or vendor
+  const categoryFilter = useMemo(() => getDataCategories(selectedCategory), [selectedCategory]);
+  const bestTimeResult = useMemo(
+    () => findBestTimes(gameTransactions.current, {
+      categories: categoryFilter,
+      location: selectedVendor,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [txVersion, selectedCategory, selectedVendor]
+  );
+  const bestTimeContext = selectedVendor && VENDOR_NAMES[selectedVendor]
+    ? VENDOR_NAMES[selectedVendor].label
+    : selectedCategory === "all"
+      ? "any concession"
+      : selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1);
+
   useEffect(() => {
     fetch("/data/games/index.json")
       .then((r) => r.json())
@@ -79,7 +98,7 @@ export default function Home() {
           // Pre-load the most recent game's transactions for vendor menus
           fetch(`/data/games/${data.games[0].date}.json`)
             .then((r) => r.json())
-            .then((gd: GameData) => { gameTransactions.current = gd.transactions; });
+            .then((gd: GameData) => { gameTransactions.current = gd.transactions; setTxVersion((v) => v + 1); });
         }
         const initial: HeatState = {};
         data.locations.forEach((loc) => (initial[loc] = 0));
@@ -118,8 +137,9 @@ export default function Home() {
     const response = await fetch(`/data/games/${selectedDate}.json`);
     const gameData: GameData = await response.json();
 
-    // Store transactions for vendor menu building
+    // Store transactions for vendor menu building and demand timeline
     gameTransactions.current = gameData.transactions;
+    setTxVersion((v) => v + 1);
 
     const config: SimulationConfig = {
       ...DEFAULT_CONFIG,
@@ -164,7 +184,7 @@ export default function Home() {
         onNodeClick={setSelectedVendor}
       />
 
-      <div className="flex items-center gap-2 mt-4 mb-6">
+      <div className="flex items-center gap-2 mt-4 mb-2">
         <span className="text-xs text-slate-400">Quiet</span>
         <div
           className="h-3 rounded-full w-32"
@@ -172,6 +192,10 @@ export default function Home() {
         />
         <span className="text-xs text-slate-400">Busy</span>
       </div>
+
+      {bestTimeResult.bestTimes.length > 0 && (
+        <BestTimeCard result={bestTimeResult} context={bestTimeContext} />
+      )}
 
       {simTime && (
         <div className="text-center mb-4">
@@ -193,7 +217,7 @@ export default function Home() {
             // Load transactions for the new game so vendor menus are accurate
             fetch(`/data/games/${e.target.value}.json`)
               .then((r) => r.json())
-              .then((gd: GameData) => { gameTransactions.current = gd.transactions; });
+              .then((gd: GameData) => { gameTransactions.current = gd.transactions; setTxVersion((v) => v + 1); });
           }}
           className="w-full rounded-lg px-4 py-3 text-sm border"
           style={{ backgroundColor: "#1e293b", color: "#fff", borderColor: "#334155" }}
