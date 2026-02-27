@@ -80,7 +80,8 @@ export default function Home() {
 
   return (
     <div className="flex flex-col items-center px-4 py-6 max-w-md mx-auto">
-      <h1 className="text-2xl font-bold mb-1 text-white">ConcessionQ</h1>
+      <h1 className="text-2xl font-bold mb-0" style={{ color: "#c5a94e" }}>ConcessionQ</h1>
+      <p className="text-xs mb-1" style={{ color: "#8b7a3e" }}>Victoria Royals</p>
       <p className="text-sm text-slate-400 mb-6">Find the shortest line</p>
 
       <ArenaMap heatState={heatState} />
@@ -125,8 +126,8 @@ export default function Home() {
 
         <button
           onClick={isRunning ? stopSimulation : startSimulation}
-          className="w-full py-3 rounded-lg font-semibold text-white"
-          style={{ backgroundColor: isRunning ? "#dc2626" : "#2563eb" }}
+          className="w-full py-3 rounded-lg font-semibold"
+          style={{ backgroundColor: isRunning ? "#dc2626" : "#c5a94e", color: isRunning ? "#fff" : "#1a2744" }}
         >
           {isRunning ? "Stop Simulation" : "Start Simulation"}
         </button>
