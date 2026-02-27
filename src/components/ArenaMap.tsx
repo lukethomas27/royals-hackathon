@@ -4,6 +4,9 @@ import { HeatState } from "@/lib/types";
 
 interface ArenaMapProps {
   heatState: HeatState;
+  activeLocations: Set<string> | null;
+  bestLocation: string | null;
+  onNodeClick?: (locationId: string) => void;
 }
 
 // ── Arena geometry ──
@@ -180,7 +183,7 @@ function rrectPath(cx: number, cy: number, hw: number, hh: number, cr: number): 
     Z`;
 }
 
-export default function ArenaMap({ heatState }: ArenaMapProps) {
+export default function ArenaMap({ heatState, activeLocations, bestLocation, onNodeClick }: ArenaMapProps) {
   const rinkPath = rrectPath(CX, CY, RINK_HW, RINK_HH, CORNER_R);
   const bowlPath = rrectPath(CX, CY, BOWL_HW, BOWL_HH, BOWL_CR);
   const concoursePath = rrectPath(CX, CY, CONC_HW, CONC_HH, CONC_CR);
@@ -396,13 +399,11 @@ export default function ArenaMap({ heatState }: ArenaMapProps) {
       ))}
 
       {/* ── Goal creases ── */}
-      {/* Left crease */}
       <path
         d={`M ${CX - RINK_HW + 24} ${CY - 12}
             A 14 14 0 0 1 ${CX - RINK_HW + 24} ${CY + 12}`}
         fill="#8fb8de" fillOpacity="0.25" stroke="#0047ab" strokeWidth="1" opacity="0.6"
       />
-      {/* Right crease */}
       <path
         d={`M ${CX + RINK_HW - 24} ${CY - 12}
             A 14 14 0 0 0 ${CX + RINK_HW - 24} ${CY + 12}`}
@@ -410,7 +411,6 @@ export default function ArenaMap({ heatState }: ArenaMapProps) {
       />
 
       {/* ── Goal nets ── */}
-      {/* Left net */}
       <rect
         x={CX - RINK_HW + 10} y={CY - 6} width={7} height={12} rx={2}
         fill="none" stroke="#888" strokeWidth="1.2" opacity="0.6"
@@ -419,7 +419,6 @@ export default function ArenaMap({ heatState }: ArenaMapProps) {
       <line x1={CX - RINK_HW + 13} y1={CY - 5} x2={CX - RINK_HW + 13} y2={CY + 5} stroke="#aaa" strokeWidth="0.3" opacity="0.5" />
       <line x1={CX - RINK_HW + 15} y1={CY - 5} x2={CX - RINK_HW + 15} y2={CY + 5} stroke="#aaa" strokeWidth="0.3" opacity="0.5" />
 
-      {/* Right net */}
       <rect
         x={CX + RINK_HW - 17} y={CY - 6} width={7} height={12} rx={2}
         fill="none" stroke="#888" strokeWidth="1.2" opacity="0.6"
@@ -428,7 +427,7 @@ export default function ArenaMap({ heatState }: ArenaMapProps) {
       <line x1={CX + RINK_HW - 14} y1={CY - 5} x2={CX + RINK_HW - 14} y2={CY + 5} stroke="#aaa" strokeWidth="0.3" opacity="0.5" />
       <line x1={CX + RINK_HW - 12} y1={CY - 5} x2={CX + RINK_HW - 12} y2={CY + 5} stroke="#aaa" strokeWidth="0.3" opacity="0.5" />
 
-      {/* ── Center ice logo (Royals "V" crest) ── */}
+      {/* ── Center ice logo ── */}
       <text
         x={CX} y={CY + 1}
         textAnchor="middle" dominantBaseline="middle"
@@ -445,13 +444,28 @@ export default function ArenaMap({ heatState }: ArenaMapProps) {
         const cs = colorToString(color);
         const bloomSize = 28 + heat * 40;
         const isHot = heat > 0.4;
+        const isDimmed = activeLocations !== null && !activeLocations.has(c.id);
+        const isBest = bestLocation === c.id;
 
         // Determine label placement based on position
         const isTop = c.y < CY;
         const labelY = isTop ? c.y - 28 : c.y + 30;
+        const goLabelY = isTop ? c.y - 40 : c.y + 42;
 
         return (
-          <g key={c.id}>
+          <g
+            key={c.id}
+            style={{ opacity: isDimmed ? 0.15 : 1, transition: "opacity 0.3s", cursor: isDimmed ? "default" : "pointer" }}
+            onClick={() => { if (!isDimmed && onNodeClick) onNodeClick(c.id); }}
+          >
+            {/* Best-location pulsing ring */}
+            {isBest && (
+              <circle cx={c.x} cy={c.y} r={24}
+                fill="none" stroke="#c5a94e" strokeWidth="2.5"
+                style={{ animation: "pulse-ring 1.5s ease-in-out infinite" }}
+              />
+            )}
+
             {/* Heat bloom (glow behind node) */}
             <circle
               cx={c.x} cy={c.y} r={bloomSize}
@@ -477,10 +491,10 @@ export default function ArenaMap({ heatState }: ArenaMapProps) {
             <circle
               cx={c.x} cy={c.y} r={18}
               fill={cs}
-              stroke="rgba(255,255,255,0.8)"
-              strokeWidth="2"
+              stroke={isBest ? "#c5a94e" : "rgba(255,255,255,0.8)"}
+              strokeWidth={isBest ? 3 : 2}
               filter={isHot ? "url(#node-glow)" : undefined}
-              style={{ transition: "fill 0.5s ease" }}
+              style={{ transition: "fill 0.5s ease, stroke 0.3s ease" }}
             />
 
             {/* Icon/label inside node */}
@@ -518,6 +532,16 @@ export default function ArenaMap({ heatState }: ArenaMapProps) {
             >
               SEC {c.section}
             </text>
+
+            {/* GO HERE indicator */}
+            {isBest && (
+              <text x={c.x} y={goLabelY} textAnchor="middle" dominantBaseline="middle"
+                fill="#c5a94e" fontSize="7" fontWeight="bold"
+                fontFamily="'JetBrains Mono', 'SF Mono', monospace"
+                style={{ animation: "pulse-ring 1.5s ease-in-out infinite" }}>
+                GO HERE
+              </text>
+            )}
           </g>
         );
       })}

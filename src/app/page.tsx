@@ -1,13 +1,27 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import ArenaMap from "@/components/ArenaMap";
+import CategoryFilter from "@/components/CategoryFilter";
+import VendorDetail from "@/components/VendorDetail";
 import {
   SimulationEngine,
   DEFAULT_CONFIG,
   SimulationConfig,
 } from "@/lib/simulation";
-import { GameData, GameIndex, HeatState, SimulationStats } from "@/lib/types";
+import { GameData, GameIndex, HeatState, SimulationStats, Transaction } from "@/lib/types";
+import { FanCategory, getDataCategories, getActiveLocations } from "@/lib/categories";
+import { buildVendorMenu, MenuItem } from "@/lib/vendorMenu";
+
+// Lookup table for concession display names
+const VENDOR_NAMES: Record<string, { label: string; shortLabel: string }> = {
+  "SOFMC Phillips Bar":      { label: "Phillips Bar",      shortLabel: "Bar" },
+  "SOFMC ReMax Fan Deck":    { label: "ReMax Fan Deck",    shortLabel: "Fan Deck" },
+  "SOFMC Portable Stations": { label: "Portable Stations", shortLabel: "Portable" },
+  "SOFMC Island Slice":      { label: "Island Slice",      shortLabel: "Pizza" },
+  "SOFMC Island Canteen":    { label: "Island Canteen",    shortLabel: "Canteen" },
+  "SOFMC TacoTacoTaco":      { label: "TacoTacoTaco",      shortLabel: "Tacos" },
+};
 
 export default function Home() {
   const [gameIndex, setGameIndex] = useState<GameIndex | null>(null);
@@ -18,7 +32,42 @@ export default function Home() {
   const [isRunning, setIsRunning] = useState(false);
   const [stats, setStats] = useState<SimulationStats | null>(null);
   const [speed, setSpeed] = useState<number>(120);
+  const [selectedCategory, setSelectedCategory] = useState<FanCategory>("all");
+  const [selectedVendor, setSelectedVendor] = useState<string | null>(null);
   const engineRef = useRef<SimulationEngine | null>(null);
+  const gameTransactions = useRef<Transaction[]>([]);
+
+  // Which locations serve the selected category (null = all)
+  const activeLocations = useMemo(
+    () => getActiveLocations(selectedCategory),
+    [selectedCategory]
+  );
+
+  // Find the location with the lowest heat among those that serve the category
+  const bestLocation = useMemo(() => {
+    if (selectedCategory === "all") return null;
+    const eligible = activeLocations;
+    if (!eligible) return null;
+    const entries = Object.entries(heatState).filter(([loc]) => eligible.has(loc));
+    if (entries.length === 0) return null;
+    const hasAnyHeat = entries.some(([, v]) => v > 0);
+    if (!hasAnyHeat) return null;
+    let minLoc = entries[0][0];
+    let minVal = entries[0][1];
+    for (const [loc, val] of entries) {
+      if (val < minVal) {
+        minLoc = loc;
+        minVal = val;
+      }
+    }
+    return minLoc;
+  }, [heatState, selectedCategory, activeLocations]);
+
+  // Build menu for the selected vendor from game data
+  const vendorMenu = useMemo((): MenuItem[] => {
+    if (!selectedVendor) return [];
+    return buildVendorMenu(gameTransactions.current, selectedVendor).items;
+  }, [selectedVendor]);
 
   useEffect(() => {
     fetch("/data/games/index.json")
@@ -27,6 +76,10 @@ export default function Home() {
         setGameIndex(data);
         if (data.games.length > 0) {
           setSelectedDate(data.games[0].date);
+          // Pre-load the most recent game's transactions for vendor menus
+          fetch(`/data/games/${data.games[0].date}.json`)
+            .then((r) => r.json())
+            .then((gd: GameData) => { gameTransactions.current = gd.transactions; });
         }
         const initial: HeatState = {};
         data.locations.forEach((loc) => (initial[loc] = 0));
@@ -47,6 +100,14 @@ export default function Home() {
     []
   );
 
+  const handleCategoryChange = useCallback((cat: FanCategory) => {
+    setSelectedCategory(cat);
+    const filter = getDataCategories(cat);
+    if (engineRef.current) {
+      engineRef.current.setCategoryFilter(filter);
+    }
+  }, []);
+
   const startSimulation = async () => {
     if (!selectedDate) return;
 
@@ -56,6 +117,9 @@ export default function Home() {
 
     const response = await fetch(`/data/games/${selectedDate}.json`);
     const gameData: GameData = await response.json();
+
+    // Store transactions for vendor menu building
+    gameTransactions.current = gameData.transactions;
 
     const config: SimulationConfig = {
       ...DEFAULT_CONFIG,
@@ -68,6 +132,10 @@ export default function Home() {
       config,
       handleUpdate
     );
+
+    // Apply current category filter to the new engine
+    const filter = getDataCategories(selectedCategory);
+    engine.setCategoryFilter(filter);
 
     engineRef.current = engine;
     setIsRunning(true);
@@ -85,9 +153,16 @@ export default function Home() {
     <div className="flex flex-col items-center px-4 py-6 max-w-md mx-auto">
       <h1 className="text-2xl font-bold mb-0" style={{ color: "#c5a94e" }}>ConcessionQ</h1>
       <p className="text-xs mb-1" style={{ color: "#8b7a3e" }}>Victoria Royals</p>
-      <p className="text-sm text-slate-400 mb-6">Find the shortest line</p>
+      <p className="text-sm text-slate-400 mb-4">Find the shortest line</p>
 
-      <ArenaMap heatState={heatState} />
+      <CategoryFilter selected={selectedCategory} onChange={handleCategoryChange} />
+
+      <ArenaMap
+        heatState={heatState}
+        activeLocations={activeLocations}
+        bestLocation={bestLocation}
+        onNodeClick={setSelectedVendor}
+      />
 
       <div className="flex items-center gap-2 mt-4 mb-6">
         <span className="text-xs text-slate-400">Quiet</span>
@@ -113,7 +188,13 @@ export default function Home() {
       <div className="w-full space-y-3">
         <select
           value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
+          onChange={(e) => {
+            setSelectedDate(e.target.value);
+            // Load transactions for the new game so vendor menus are accurate
+            fetch(`/data/games/${e.target.value}.json`)
+              .then((r) => r.json())
+              .then((gd: GameData) => { gameTransactions.current = gd.transactions; });
+          }}
           className="w-full rounded-lg px-4 py-3 text-sm border"
           style={{ backgroundColor: "#1e293b", color: "#fff", borderColor: "#334155" }}
           disabled={isRunning}
@@ -156,6 +237,17 @@ export default function Home() {
           {isRunning ? "Stop Simulation" : "Start Simulation"}
         </button>
       </div>
+
+      {/* Vendor detail panel */}
+      {selectedVendor && VENDOR_NAMES[selectedVendor] && (
+        <VendorDetail
+          name={VENDOR_NAMES[selectedVendor].label}
+          shortLabel={VENDOR_NAMES[selectedVendor].shortLabel}
+          heat={heatState[selectedVendor] || 0}
+          items={vendorMenu}
+          onClose={() => setSelectedVendor(null)}
+        />
+      )}
     </div>
   );
 }

@@ -29,6 +29,7 @@ export class SimulationEngine {
   private peakHeat: number;
   private peakStand: string;
   private peakTime: string;
+  private categoryFilter: Set<string> | null; // null = all categories
 
   constructor(
     transactions: Transaction[],
@@ -48,6 +49,7 @@ export class SimulationEngine {
     this.lastDecaySimTime = 0;
     this.animFrameId = null;
     this.running = false;
+    this.categoryFilter = null;
 
     for (const loc of locations) {
       this.rawHeat[loc] = 0;
@@ -59,6 +61,55 @@ export class SimulationEngine {
     this.peakTime = "";
     for (const loc of locations) {
       this.locationStats[loc] = { transactionCount: 0, totalQty: 0 };
+    }
+  }
+
+  /** Update category filter and replay heat from the start up to the current sim time. */
+  setCategoryFilter(filter: Set<string> | null) {
+    this.categoryFilter = filter;
+    if (!this.running) return;
+
+    // Reset heat and replay all past transactions with the new filter
+    for (const loc of this.locations) {
+      this.rawHeat[loc] = 0;
+    }
+
+    const realElapsed = (Date.now() - this.simStartTime) / 1000;
+    const simElapsed = realElapsed * this.config.speedMultiplier;
+    const currentSimSeconds = this.gameStartSeconds + simElapsed;
+
+    // Replay transactions and decay up to current time
+    this.txIndex = 0;
+    this.lastDecaySimTime = this.gameStartSeconds;
+    const decayIntervalSeconds = this.config.decayIntervalMinutes * 60;
+
+    while (
+      this.txIndex < this.transactions.length &&
+      this.timeToSeconds(this.transactions[this.txIndex].time) <= currentSimSeconds
+    ) {
+      const tx = this.transactions[this.txIndex];
+      const txSeconds = this.timeToSeconds(tx.time);
+
+      // Apply any pending decay up to this transaction's time
+      while (this.lastDecaySimTime + decayIntervalSeconds <= txSeconds) {
+        this.lastDecaySimTime += decayIntervalSeconds;
+        for (const loc of this.locations) {
+          this.rawHeat[loc] *= 1 - this.config.decayFactor;
+        }
+      }
+
+      if (!filter || filter.has(tx.category)) {
+        this.rawHeat[tx.location] = (this.rawHeat[tx.location] || 0) + tx.qty;
+      }
+      this.txIndex++;
+    }
+
+    // Apply remaining decay up to current time
+    while (this.lastDecaySimTime + decayIntervalSeconds <= currentSimSeconds) {
+      this.lastDecaySimTime += decayIntervalSeconds;
+      for (const loc of this.locations) {
+        this.rawHeat[loc] *= 1 - this.config.decayFactor;
+      }
     }
   }
 
@@ -164,7 +215,9 @@ export class SimulationEngine {
       this.timeToSeconds(this.transactions[this.txIndex].time) <= currentSimSeconds
     ) {
       const tx = this.transactions[this.txIndex];
-      this.rawHeat[tx.location] = (this.rawHeat[tx.location] || 0) + tx.qty;
+      if (!this.categoryFilter || this.categoryFilter.has(tx.category)) {
+        this.rawHeat[tx.location] = (this.rawHeat[tx.location] || 0) + tx.qty;
+      }
       this.locationStats[tx.location].transactionCount += 1;
       this.locationStats[tx.location].totalQty += tx.qty;
       this.txIndex++;
