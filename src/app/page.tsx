@@ -56,7 +56,7 @@ export default function Home() {
 
     const config: SimulationConfig = {
       ...DEFAULT_CONFIG,
-      speedMultiplier: 30,
+      speedMultiplier: 120,
     };
 
     const engine = new SimulationEngine(
@@ -88,12 +88,10 @@ export default function Home() {
 
       <div className="flex items-center gap-2 mt-4 mb-6">
         <span className="text-xs text-slate-400">Quiet</span>
-        <div className="flex h-3 rounded-full overflow-hidden w-32">
-          <div className="flex-1" style={{ backgroundColor: "#22c55e" }} />
-          <div className="flex-1" style={{ backgroundColor: "#eab308" }} />
-          <div className="flex-1" style={{ backgroundColor: "#f97316" }} />
-          <div className="flex-1" style={{ backgroundColor: "#ef4444" }} />
-        </div>
+        <div
+          className="h-3 rounded-full w-32"
+          style={{ background: "linear-gradient(to right, #22c55e, #eab308, #f97316, #ef4444)" }}
+        />
         <span className="text-xs text-slate-400">Busy</span>
       </div>
 
