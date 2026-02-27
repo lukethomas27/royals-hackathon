@@ -1,4 +1,4 @@
-# ConcessionQ - Victoria Royals Arena Queue Visualizer
+# ArenaPulse - Victoria Royals Arena Queue Visualizer
 
 ## Commands
 
