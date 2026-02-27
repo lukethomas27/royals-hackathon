@@ -14,14 +14,14 @@
   --text-primary: #1a1a2e;
   --text-secondary: #5a5a72;
   --text-tertiary: #8a8a9a;
-  --text-inverted: #ffffff;
+  --text-inverted: #1a1a2e;
 
-  --border-default: #d8d4cc;
-  --border-subtle: #e8e4dc;
+  --border-default: #c8c0b0;
+  --border-subtle: #d8d4cc;
 
-  --accent-gold: #b8972e;
-  --accent-gold-dim: #9a7d24;
-  --accent-gold-bg: rgba(184, 151, 46, 0.1);
+  --accent-gold: #9a7d24;
+  --accent-gold-dim: #7a6318;
+  --accent-gold-bg: rgba(154, 125, 36, 0.12);
 
   /* Arena map tokens */
   --arena-concourse: #e8e2d6;
@@ -45,9 +45,9 @@
 
   --legend-text: #8a8a9a;
 
-  --btn-bg: #e8e4dc;
-  --btn-text: #5a5a72;
-  --btn-border: #d8d4cc;
+  --btn-bg: #ddd8cc;
+  --btn-text: #4a4a60;
+  --btn-border: #c8c0b0;
   --btn-active-bg: var(--accent-gold);
   --btn-active-text: #ffffff;
   --btn-active-border: var(--accent-gold);
@@ -117,6 +117,62 @@
   color-scheme: dark;
 }
 
+/* Explicit light theme (overrides system dark preference) */
+[data-theme="light"] {
+  --bg-body: #f4f1ec;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f8f6f2;
+  --bg-input: #ffffff;
+
+  --text-primary: #1a1a2e;
+  --text-secondary: #5a5a72;
+  --text-tertiary: #8a8a9a;
+  --text-inverted: #1a1a2e;
+
+  --border-default: #c8c0b0;
+  --border-subtle: #d8d4cc;
+
+  --accent-gold: #9a7d24;
+  --accent-gold-dim: #7a6318;
+  --accent-gold-bg: rgba(154, 125, 36, 0.12);
+
+  --arena-concourse: #e8e2d6;
+  --arena-concourse-stroke: #d0c9ba;
+  --arena-concourse-line: #d4cdbf;
+  --arena-bowl: #ddd8cc;
+  --arena-bowl-stroke: #c8c0b0;
+  --arena-tier-line: #c8c0b0;
+  --arena-section-text: #9a9080;
+  --arena-boards: #2a2a3a;
+  --arena-boards-inner: #555;
+  --arena-shadow-opacity: 0.15;
+
+  --arena-node-stroke: rgba(0, 0, 0, 0.25);
+  --arena-node-label: #5a5a72;
+  --arena-node-section: #8a8a9a;
+  --arena-badge-bg: #ffffff;
+  --arena-badge-stroke: #9a7d24;
+  --arena-badge-text: #8a6d1a;
+  --arena-connector-opacity: 0.2;
+
+  --legend-text: #8a8a9a;
+
+  --btn-bg: #ddd8cc;
+  --btn-text: #4a4a60;
+  --btn-border: #c8c0b0;
+  --btn-active-bg: #9a7d24;
+  --btn-active-text: #ffffff;
+  --btn-active-border: #9a7d24;
+
+  --panel-bg: #ffffff;
+  --panel-border: #e8e4dc;
+
+  --heat-bar-bg: #e8e4dc;
+  --progress-bg: #e8e4dc;
+
+  color-scheme: light;
+}
+
 /* System preference: apply dark when no explicit data-theme and system prefers dark */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -184,14 +240,22 @@ body {
 }
 
 /* ── Animations ── */
+/* Heat bloom behind node — soft opacity breathe, NO scale (prevents color drifting away) */
 @keyframes pulse-glow {
-  0%, 100% { opacity: 0.3; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(1.15); }
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.8; }
 }
 
+/* Tight glow ring hugging the node — breathes in intensity */
+@keyframes glow-ring {
+  0%, 100% { opacity: 0.3; stroke-width: 4; }
+  50% { opacity: 0.7; stroke-width: 7; }
+}
+
+/* Best-location pulsing indicator */
 @keyframes pulse-ring {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  50% { opacity: 0.35; }
 }
 
 @keyframes node-enter {

@@ -60,11 +60,11 @@ export default function ConcessionList({
   onNodeClick,
   stats,
 }: ConcessionListProps) {
-  // Sort: best first, then by heat ascending (quietest first)
+  // Stable order: best location pinned to top, rest in fixed definition order
   const sorted = [...CONCESSIONS].sort((a, b) => {
     if (bestLocation === a.id) return -1;
     if (bestLocation === b.id) return 1;
-    return (heatState[a.id] || 0) - (heatState[b.id] || 0);
+    return 0;
   });
 
   return (
