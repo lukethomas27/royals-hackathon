@@ -1,4 +1,4 @@
-import { Transaction, HeatState } from "./types";
+import { Transaction, HeatState, LocationStats, SimulationStats } from "./types";
 
 export interface SimulationConfig {
   speedMultiplier: number; // e.g. 30 for 30x speed
@@ -22,15 +22,19 @@ export class SimulationEngine {
   private gameStartSeconds: number;
   private gameEndSeconds: number;
   private lastDecaySimTime: number;
-  private onUpdate: (heat: HeatState, simTime: string, progress: number) => void;
+  private onUpdate: (heat: HeatState, simTime: string, progress: number, stats: SimulationStats) => void;
   private animFrameId: number | null;
   private running: boolean;
+  private locationStats: { [location: string]: LocationStats };
+  private peakHeat: number;
+  private peakStand: string;
+  private peakTime: string;
 
   constructor(
     transactions: Transaction[],
     locations: string[],
     config: SimulationConfig,
-    onUpdate: (heat: HeatState, simTime: string, progress: number) => void
+    onUpdate: (heat: HeatState, simTime: string, progress: number, stats: SimulationStats) => void
   ) {
     this.transactions = transactions;
     this.locations = locations;
@@ -48,6 +52,14 @@ export class SimulationEngine {
     for (const loc of locations) {
       this.rawHeat[loc] = 0;
     }
+
+    this.locationStats = {};
+    this.peakHeat = 0;
+    this.peakStand = "";
+    this.peakTime = "";
+    for (const loc of locations) {
+      this.locationStats[loc] = { transactionCount: 0, totalQty: 0 };
+    }
   }
 
   private timeToSeconds(time: string): number {
@@ -62,6 +74,35 @@ export class SimulationEngine {
     const hh = h > 12 ? h - 12 : h;
     const ampm = h >= 12 ? "PM" : "AM";
     return `${hh}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")} ${ampm}`;
+  }
+
+  private getStats(isComplete: boolean): SimulationStats {
+    const AVG_PRICE = 8;
+    let totalTx = 0;
+    let totalQty = 0;
+    let minHeat = Infinity;
+    let maxHeat = -Infinity;
+    let quietest = this.locations[0];
+    let busiest = this.locations[0];
+
+    for (const loc of this.locations) {
+      totalTx += this.locationStats[loc].transactionCount;
+      totalQty += this.locationStats[loc].totalQty;
+      const h = this.rawHeat[loc];
+      if (h < minHeat) { minHeat = h; quietest = loc; }
+      if (h > maxHeat) { maxHeat = h; busiest = loc; }
+    }
+
+    return {
+      perLocation: { ...this.locationStats },
+      totalTransactions: totalTx,
+      quietestStand: quietest,
+      busiestStand: busiest,
+      peakStand: this.peakStand,
+      peakTime: this.peakTime,
+      estimatedRevenue: totalQty * AVG_PRICE,
+      isComplete,
+    };
   }
 
   private getNormalizedHeat(): HeatState {
@@ -87,6 +128,13 @@ export class SimulationEngine {
       this.rawHeat[loc] = 0;
     }
 
+    for (const loc of this.locations) {
+      this.locationStats[loc] = { transactionCount: 0, totalQty: 0 };
+    }
+    this.peakHeat = 0;
+    this.peakStand = "";
+    this.peakTime = "";
+
     this.tick();
   }
 
@@ -107,7 +155,7 @@ export class SimulationEngine {
 
     if (currentSimSeconds > this.gameEndSeconds + 60) {
       this.running = false;
-      this.onUpdate(this.getNormalizedHeat(), this.secondsToTime(this.gameEndSeconds), 1);
+      this.onUpdate(this.getNormalizedHeat(), this.secondsToTime(this.gameEndSeconds), 1, this.getStats(true));
       return;
     }
 
@@ -117,6 +165,8 @@ export class SimulationEngine {
     ) {
       const tx = this.transactions[this.txIndex];
       this.rawHeat[tx.location] = (this.rawHeat[tx.location] || 0) + tx.qty;
+      this.locationStats[tx.location].transactionCount += 1;
+      this.locationStats[tx.location].totalQty += tx.qty;
       this.txIndex++;
     }
 
@@ -128,13 +178,22 @@ export class SimulationEngine {
       }
     }
 
+    for (const loc of this.locations) {
+      if (this.rawHeat[loc] > this.peakHeat) {
+        this.peakHeat = this.rawHeat[loc];
+        this.peakStand = loc;
+        this.peakTime = this.secondsToTime(Math.min(currentSimSeconds, this.gameEndSeconds));
+      }
+    }
+
     const totalDuration = this.gameEndSeconds - this.gameStartSeconds;
     const progress = Math.min(simElapsed / totalDuration, 1);
 
     this.onUpdate(
       this.getNormalizedHeat(),
       this.secondsToTime(Math.min(currentSimSeconds, this.gameEndSeconds)),
-      progress
+      progress,
+      this.getStats(false)
     );
 
     this.animFrameId = requestAnimationFrame(() => this.tick());
