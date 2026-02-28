@@ -11,15 +11,24 @@ npm run process-data   # CSV → JSON pipeline (needs /External folder with CSVs
 
 ## Architecture
 
-Next.js 16 + React 19 + TypeScript + Tailwind v4. No test framework configured.
+Next.js 16 + React 19 + TypeScript + Tailwind v4. No test framework configured. Requires Node.js 18+.
 
 ```
-src/app/page.tsx           # Main client component - game selector, simulation controls
-src/components/ArenaMap.tsx # SVG arena with heat-mapped concession stands
-src/lib/simulation.ts      # SimulationEngine class - time-based transaction replay with decay
-src/lib/types.ts           # Transaction, GameData, GameIndex, HeatState interfaces
-scripts/process-data.ts    # CSV-to-JSON data pipeline (PapaParse)
-public/data/games/         # 73 game JSON files + index.json
+src/app/page.tsx                  # Main client component - game selector, simulation controls
+src/app/layout.tsx                # Root layout with theme support
+src/components/ArenaMap.tsx       # SVG arena with heat-mapped concession stands
+src/components/ConcessionList.tsx # Sortable list view of concession stands
+src/components/VendorDetail.tsx   # Vendor detail panel with menu items & wait times
+src/components/CategoryFilter.tsx # Category filter chips (food, beer, drinks, snacks)
+src/components/DemandTimeline.tsx # Demand timeline chart
+src/components/ThemeToggle.tsx    # Light/dark theme toggle
+src/lib/simulation.ts            # SimulationEngine class - time-based transaction replay with decay
+src/lib/types.ts                 # Transaction, GameData, GameIndex, HeatState interfaces
+src/lib/categories.ts            # FanCategory type and CSV category mapping
+src/lib/vendorMenu.ts            # Estimated menu items and pricing (not from data)
+src/lib/demandTimeline.ts        # "Best Time to Go" analysis from transaction data
+scripts/process-data.ts          # CSV-to-JSON data pipeline (PapaParse)
+public/data/games/               # 68 game JSON files + index.json
 ```
 
 ## Data Flow
