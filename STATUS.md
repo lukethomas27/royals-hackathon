@@ -10,10 +10,12 @@ This session had npm registry access and ran `npm install && npm run build
 && npm run lint` for the first time — see "Build-verified" below, this
 undoes the biggest caveat in the "What this session could and couldn't do"
 section right below (kept as-is since it's still accurate for what that
-*build* session covered). Also fixed the staff-persistence durability gap
-and resolved (not just re-flagged) one of the two Catalog field guesses.
-Still no live Square credentials and still no Eventium CSV/dashboard access
-— see "Still blocked" below for exactly what that leaves open.
+*build* session covered). Also fixed the staff-persistence durability gap.
+The two Catalog field guesses are now docs-checked instead of blind — still
+**unverified against Eventium's actual account**, since neither the CSV nor
+dashboard access exists in this environment. Still no live Square
+credentials either — see "Still blocked" below for exactly what that
+leaves open.
 
 **Build-verified:** `npm install` succeeds (no registry restriction in this
 environment). `npm run build` compiles clean, TypeScript passes, all 8
@@ -28,10 +30,14 @@ cart/checkout math, order submission (pickup and in-seat delivery), the
 and the staff force-open/force-closed override actually blocking a
 subsequent order — all behave correctly.
 
-**Catalog field mapping — resolved, not re-guessed:** the Eventium catalog
-CSV (`13-eventium/square-export/8XXMBBH0AT7HD_catalog-2026-07-28-0318.csv`)
-isn't on disk in this environment, so it still can't be checked directly.
-Instead, checked Square's own public API docs and developer forum:
+**Catalog field mapping — still unverified against Eventium's account,
+upgraded from blind guess to docs-checked:** the Eventium catalog CSV
+(`13-eventium/square-export/8XXMBBH0AT7HD_catalog-2026-07-28-0318.csv`)
+isn't on disk in this environment, so this is **not** checked against
+Eventium's actual export or dashboard — that check still hasn't happened.
+What did happen: checked Square's own generic public API docs and
+developer forum (applies to every Square merchant, not Eventium
+specifically):
 `ecom_visibility` (the "Online" mapping) is confirmed real and documented.
 "Self-serve" is confirmed to have **no** per-item Catalog API field
 anywhere in Square's public docs — checked the full CatalogItem field list
@@ -153,14 +159,17 @@ everything below:
   against the safety-net section list (107–111), never a hand-typed seat
   database. **This is the build doc's own first-task item, unchanged: go
   confirm this before assuming either path.**
-- **Two Square Catalog fields, previously "best-effort guesses" — RESOLVED
-  against Square's public docs in the Aug 25 follow-up session above** (the
-  Eventium CSV still isn't accessible, so this is docs-confirmation, not
-  a live-account check): "Online" -> `ecom_visibility`, confirmed real. 
+- **Two Square Catalog fields, previously "best-effort guesses" — checked
+  against Square's *generic* public docs in the Aug 25 follow-up session
+  above, still UNVERIFIED against Eventium's actual account** (the CSV and
+  dashboard access still aren't available in this environment, so this is
+  docs-confirmation only, not a live-account check): "Online" ->
+  `ecom_visibility`, confirmed to be a real documented field in general.
   "Self-serve" -> confirmed no per-item Catalog API field exists for this
-  anywhere in Square's public docs; defaulting `selfServeEnabled` true is
-  the correct fallback, not an open guess. See `catalog.ts` file header for
-  the citation trail. Only remaining question: whether Eventium's actual
+  anywhere in Square's public docs, so defaulting `selfServeEnabled` true
+  is a reasoned fallback rather than an open guess — but still not checked
+  against what Eventium's dashboard actually shows. See `catalog.ts` file
+  header for the citation trail. Only remaining question: whether Eventium's actual
   setup does something bespoke outside the public API — needs dashboard
   access to rule out, not more research from outside it.
 - **Inventory counts are read as `null`** — sold-out state comes from
