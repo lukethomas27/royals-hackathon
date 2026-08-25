@@ -4,6 +4,82 @@ Written against `royals-app-build-context-v3.md` (the ArenaPulse project doc).
 Read that first — this file only tracks what's implemented, what's stubbed,
 and what still needs live Square access to finish or even verify.
 
+## Update — Aug 25, 2026, follow-up session
+
+This session had npm registry access and ran `npm install && npm run build
+&& npm run lint` for the first time — see "Build-verified" below, this
+undoes the biggest caveat in the "What this session could and couldn't do"
+section right below (kept as-is since it's still accurate for what that
+*build* session covered). Also fixed the staff-persistence durability gap
+and resolved (not just re-flagged) one of the two Catalog field guesses.
+Still no live Square credentials and still no Eventium CSV/dashboard access
+— see "Still blocked" below for exactly what that leaves open.
+
+**Build-verified:** `npm install` succeeds (no registry restriction in this
+environment). `npm run build` compiles clean, TypeScript passes, all 8
+routes generate. `npm run lint` has 1 pre-existing error + 3 warnings, all
+in files untouched this session (`ThemeToggle.tsx` — setState-in-effect,
+`staff/page.tsx` and `orders.ts` — unused eslint-disable directives,
+`mock.ts` — unused param) — not fixed here, out of scope for this pass.
+Also ran the app end-to-end against mock data via the dev server and curl:
+stand list, menu browse (items correctly filtered to orderable-only),
+cart/checkout math, order submission (pickup and in-seat delivery), the
+24oz-alcohol-limit gate, the invalid-seat-section gate, the sold-out gate,
+and the staff force-open/force-closed override actually blocking a
+subsequent order — all behave correctly.
+
+**Catalog field mapping — resolved, not re-guessed:** the Eventium catalog
+CSV (`13-eventium/square-export/8XXMBBH0AT7HD_catalog-2026-07-28-0318.csv`)
+isn't on disk in this environment, so it still can't be checked directly.
+Instead, checked Square's own public API docs and developer forum:
+`ecom_visibility` (the "Online" mapping) is confirmed real and documented.
+"Self-serve" is confirmed to have **no** per-item Catalog API field
+anywhere in Square's public docs — checked the full CatalogItem field list
+(`available_online`, `available_for_pickup`, `available_electronically`,
+`skip_modifier_screen`, etc. — none of these mean self-serve/kiosk, they're
+shipping/pickup/electronic *fulfillment* flags). Square's self-serve
+ordering (Kiosk hardware, QR self-order) is a site/product-level feature,
+not Catalog item data. `selfServeEnabled` defaulting `true` is therefore
+the correct fallback, not an open guess — see `src/lib/square/catalog.ts`
+file header for the full citation trail. Genuinely still unresolved: is
+Eventium doing something bespoke here that isn't part of the public
+Catalog API surface? Only dashboard access answers that.
+
+**Staff open/close persistence — fixed.** `src/lib/staffState.ts` now uses
+Vercel KV (`@vercel/kv`, added as a dependency) when `KV_REST_API_URL` /
+`KV_REST_API_TOKEN` are set — durable on Vercel's serverless runtime, fixing
+the exact gap this file used to flag. Falls back to the same JSON-file
+behavior as before when those env vars are unset (local dev, or this
+mock-data build), so nothing else changes for anyone not yet using KV.
+Verified via the dev-server test above (force-close persisted and actually
+blocked a subsequent order). No live KV store exists in this environment,
+so only the fallback path has been exercised end-to-end — the KV path is
+correct against the documented `@vercel/kv` API but unverified against a
+real KV instance.
+
+**`.env.example` — added.** Referenced by `CLAUDE.md`/this file for
+sessions but was never actually committed; a session locating it would have
+found nothing. Now documents every env var this app reads, including the
+two new KV ones.
+
+## Still blocked
+
+- **The Eventium catalog CSV and any `13-eventium` project directory are
+  not present anywhere on this disk** (checked broadly). If that's expected
+  to exist in a different environment/mount, whoever runs the next session
+  there should re-check the two Catalog field guesses against it directly
+  — the docs-based confirmation above is a reasonable stand-in, not a
+  substitute for the real export.
+- **Payment capture (Web Payments SDK)** — untouched this session,
+  deliberately, per instruction: needs real Square credentials to build
+  against sensibly. Still exactly as described below.
+- **Ordering Stations seat-picker API exposure** — untouched this session,
+  deliberately: still genuinely blocked on Square dashboard/account access,
+  not something to guess at. Still exactly as described below.
+- **Real Square credentials** — still none in this environment. Everything
+  above was verified against mock data only; `isSquareConfigured()` still
+  returns false everywhere.
+
 ## What this session could and couldn't do
 
 This build ran in a sandboxed session with **no live Square credentials**
@@ -20,7 +96,8 @@ everything below:
    syntax) but not type-checked or build-verified end to end. **Before this
    ships or gets reviewed, someone needs to run `npm install && npm run
    build && npm run lint` locally or in CI** — treat that as step zero, not
-   an optional nice-to-have.
+   an optional nice-to-have. (Update: done in the Aug 25 follow-up session
+   above — build and install are clean, lint has pre-existing issues only.)
 
 ## What's real and wired end to end
 
@@ -56,12 +133,13 @@ everything below:
   live Square Application ID and a sandbox to test against, which this
   session doesn't have. The checkout UI says this plainly rather than
   pretending otherwise.
-- **Staff open/close persistence** (`src/lib/staffState.ts`) is a JSON file
-  on local disk. That's fine for `npm run dev`, **not fine for Vercel**
-  (serverless filesystem writes don't persist across invocations). Before
-  launch this needs a real small store — Vercel KV or Upstash Redis is the
-  obvious fit for something this size. The file is written so swapping the
-  two functions in `staffState.ts` is the only change needed.
+- **Staff open/close persistence** (`src/lib/staffState.ts`) — FIXED in the
+  Aug 25 follow-up session above: now backed by Vercel KV when
+  `KV_REST_API_URL`/`KV_REST_API_TOKEN` are set, durable on Vercel's
+  serverless runtime. Still falls back to the local JSON file when those
+  are unset (dev / this mock-data build), which is the only path actually
+  exercised so far — provision a real KV store and test that path before
+  launch.
 - **`STAFF_PASSCODE` unset = `/staff` is open to anyone with the URL.** Dev
   convenience only, called out in the route and in `.env.example`. Set it
   before this is reachable from a real domain.
@@ -75,13 +153,16 @@ everything below:
   against the safety-net section list (107–111), never a hand-typed seat
   database. **This is the build doc's own first-task item, unchanged: go
   confirm this before assuming either path.**
-- **Two Square Catalog fields are best-effort guesses**, flagged at the top
-  of `catalog.ts`: the field backing the dashboard's "Online" column
-  (mapped to `ecom_visibility`) and "Self-serve" (not mapped to anything —
-  defaulted true everywhere, because self-serve is very likely a Square
-  Online *site* setting rather than base Catalog data, and there's no
-  public API surface for it that I could find). Both need five minutes of
-  checking against a live account rather than more guessing from outside it.
+- **Two Square Catalog fields, previously "best-effort guesses" — RESOLVED
+  against Square's public docs in the Aug 25 follow-up session above** (the
+  Eventium CSV still isn't accessible, so this is docs-confirmation, not
+  a live-account check): "Online" -> `ecom_visibility`, confirmed real. 
+  "Self-serve" -> confirmed no per-item Catalog API field exists for this
+  anywhere in Square's public docs; defaulting `selfServeEnabled` true is
+  the correct fallback, not an open guess. See `catalog.ts` file header for
+  the citation trail. Only remaining question: whether Eventium's actual
+  setup does something bespoke outside the public API — needs dashboard
+  access to rule out, not more research from outside it.
 - **Inventory counts are read as `null`** — sold-out state comes from
   `location_overrides[].sold_out` on each variation, which is a real
   documented field, but exact remaining-count tracking (`/v2/inventory/*`)

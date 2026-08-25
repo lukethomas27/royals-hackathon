@@ -8,15 +8,27 @@
 //   - variation.item_variation_data.location_overrides[].sold_out
 //   - item.present_at_all_locations / present_at_location_ids / absent_at_location_ids
 //
-// UNCONFIRMED against Eventium's live account (flagged inline, see
-// STATUS.md): the exact field backing the dashboard's "Online" and
-// "Self-serve" columns. Square's public Catalog API does not have a single
-// universally-documented field named "self_serve" — this is very likely a
-// per-site Square Online configuration rather than base Catalog data. We
-// read the closest documented field (ecom_visibility) for "Online," and
-// leave selfServeEnabled defaulted true with a location-override escape
-// hatch until someone with dashboard access confirms where that flag
-// actually lives.
+// Catalog field mapping, checked 2026-08-25 against Square's public API
+// docs and developer forums (no Eventium CSV/dashboard access available —
+// see STATUS.md):
+//   - "Online" -> `ecom_visibility` ("VISIBLE" | "HIDDEN" | "UNAVAILABLE").
+//     CONFIRMED real and documented (Square dev forum: "How do I update the
+//     field ecom_visibility via the API" — it's read-only/computed from
+//     Square Online site settings, which is exactly why it's the right
+//     field to *read* here even though it can't be *written* via this API).
+//   - "Self-serve" -> no field. CONFIRMED (not just unconfirmed) there is no
+//     per-item Catalog API field for this anywhere in Square's public docs
+//     (checked CatalogItem's full field list: available_online,
+//     available_for_pickup, available_electronically, skip_modifier_screen,
+//     etc. — none of these mean "self-serve/kiosk," they're shipping/
+//     pickup/electronic *fulfillment* flags). Square's self-serve ordering
+//     (Square Kiosk hardware, QR-code self-order) is a site/product-level
+//     feature, not Catalog item data. selfServeEnabled staying defaulted
+//     true is therefore not a guess needing five minutes of dashboard time
+//     — it's the correct fallback until Square ships a real field, or until
+//     someone confirms Eventium is using a different mechanism (e.g. item
+//     visibility scoped to a specific Square Online site) that this app
+//     would need bespoke handling for.
 
 import { isSquareConfigured, squareRequest } from "./client";
 import { mockCatalogForLocation, MOCK_TAXES } from "./mock";
@@ -123,8 +135,9 @@ async function fetchLiveCatalog(
       categoryId,
       categoryName: categoryId ? categories[categoryId]?.name ?? null : null,
       taxIds: obj.item_data.tax_ids ?? [],
-      // Best-effort mapping — see the file header's UNCONFIRMED note.
+      // ecom_visibility mapping confirmed real, see file header.
       onlineVisible: (obj.item_data.ecom_visibility ?? "VISIBLE") === "VISIBLE",
+      // No Catalog API field for this exists — confirmed, see file header.
       selfServeEnabled: true,
       variations: variationsByItemId[obj.id] ?? [],
     });
