@@ -36,6 +36,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# dev-only staff state persistence (see src/lib/staffState.ts — not durable,
+# not used in production)
+/.data/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

@@ -2,12 +2,26 @@
 
 import { HeatState, SimulationStats } from "@/lib/types";
 
+export interface MapStand {
+  slot: number;
+  locationId: string;
+  role: "pickup" | "in_seat";
+  displayName: string; // always live from Square — never hardcoded
+  heatmapKey: string | null;
+  isOpen: boolean;
+}
+
 interface ArenaMapProps {
+  stands: MapStand[];
   heatState: HeatState;
-  activeLocations: Set<string> | null;
-  bestLocation: string | null;
+  activeLocations: Set<string> | null; // heatmapKeys
+  bestLocation: string | null; // heatmapKey
   onNodeClick?: (locationId: string) => void;
   stats?: SimulationStats | null;
+  /** Physical arena section the in-seat stand belongs to (venue fact, not a
+   * business name) — passed down from the /api/stands response rather than
+   * read from server env directly, since this is a client component. */
+  inSeatSection?: string;
 }
 
 // ── Arena geometry ──
@@ -31,64 +45,16 @@ const CONC_CR = BOWL_CR + CONCOURSE_PAD;
 // Node dimensions
 const NODE_R = 26;
 
-// ── Concession positions ──
-const CONCESSIONS: {
-  id: string;
-  label: string;
-  shortLabel: string;
-  x: number;
-  y: number;
-  section: string;
-}[] = [
-  {
-    id: "SOFMC Island Canteen",
-    label: "Island Canteen",
-    shortLabel: "Canteen",
-    x: CX - 120,
-    y: CY - CONC_HH - 10,
-    section: "101",
-  },
-  {
-    id: "SOFMC Island Slice",
-    label: "Island Slice",
-    shortLabel: "Pizza",
-    x: CX + 110,
-    y: CY - CONC_HH - 10,
-    section: "105",
-  },
-  {
-    id: "SOFMC ReMax Fan Deck",
-    label: "ReMax Fan Deck",
-    shortLabel: "Fan Deck",
-    x: CX + CONC_HW + 14,
-    y: CY,
-    section: "108",
-  },
-  {
-    id: "SOFMC TacoTacoTaco",
-    label: "TacoTacoTaco",
-    shortLabel: "Tacos",
-    x: CX + 90,
-    y: CY + CONC_HH + 10,
-    section: "113",
-  },
-  {
-    id: "SOFMC Phillips Bar",
-    label: "Phillips Bar",
-    shortLabel: "Bar",
-    x: CX - 70,
-    y: CY + CONC_HH + 10,
-    section: "112",
-  },
-  {
-    id: "SOFMC Portable Stations",
-    label: "Portable Stations",
-    shortLabel: "Portable",
-    x: CX - CONC_HW - 14,
-    y: CY,
-    section: "117",
-  },
-];
+// Purely geometric layout per slot (1-4) — carries no business name, see
+// src/lib/square/config.ts SLOT_LAYOUT for the rationale. Badge text is
+// "PICKUP" for pickup-role slots; the in-seat slot's badge is its real
+// physical arena section (a venue fact, not a marketing name).
+const SLOT_POSITIONS: Record<number, { x: number; y: number }> = {
+  1: { x: CX - 120, y: CY - CONC_HH - 10 },
+  2: { x: CX + 110, y: CY - CONC_HH - 10 },
+  3: { x: CX + 90, y: CY + CONC_HH + 10 },
+  4: { x: CX + CONC_HW + 14, y: CY },
+};
 
 // ── Seating sections ──
 function generateSections(): { number: number; x: number; y: number; angle: number }[] {
@@ -179,7 +145,7 @@ function rrectPath(cx: number, cy: number, hw: number, hh: number, cr: number): 
     Z`;
 }
 
-export default function ArenaMap({ heatState, activeLocations, bestLocation, onNodeClick, stats }: ArenaMapProps) {
+export default function ArenaMap({ stands, heatState, activeLocations, bestLocation, onNodeClick, stats, inSeatSection = "108" }: ArenaMapProps) {
   const rinkPath = rrectPath(CX, CY, RINK_HW, RINK_HH, CORNER_R);
   const bowlPath = rrectPath(CX, CY, BOWL_HW, BOWL_HH, BOWL_CR);
   const concoursePath = rrectPath(CX, CY, CONC_HW, CONC_HH, CONC_CR);
@@ -196,6 +162,11 @@ export default function ArenaMap({ heatState, activeLocations, bestLocation, onN
     [CX + 34, CY - 34],
     [CX + 34, CY + 34],
   ];
+
+  const nodes = stands.map((s) => ({
+    ...s,
+    ...(SLOT_POSITIONS[s.slot] ?? { x: CX, y: CY }),
+  }));
 
   return (
     <svg
@@ -230,35 +201,31 @@ export default function ArenaMap({ heatState, activeLocations, bestLocation, onN
           </feMerge>
         </filter>
 
-        {/* Best-location gold glow */}
-        <filter id="gold-glow" x="-40%" y="-50%" width="180%" height="220%">
+        {/* Best-location glow */}
+        <filter id="best-glow" x="-40%" y="-50%" width="180%" height="220%">
           <feGaussianBlur stdDeviation="6" result="blur" />
-          <feFlood floodColor="#c5a94e" floodOpacity="0.5" result="gold" />
-          <feComposite in="gold" in2="blur" operator="in" result="goldBlur" />
+          <feFlood floodColor="var(--accent-gold)" floodOpacity="0.5" result="tint" />
+          <feComposite in="tint" in2="blur" operator="in" result="tintBlur" />
           <feMerge>
-            <feMergeNode in="goldBlur" />
+            <feMergeNode in="tintBlur" />
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
 
         {/* Per-node gradients */}
-        {CONCESSIONS.map((c) => {
-          const heat = heatState[c.id] || 0;
+        {nodes.map((s) => {
+          const heat = (s.heatmapKey && heatState[s.heatmapKey]) || 0;
           const color = heatToColor(heat);
           const cs = colorToString(color);
           const light = lighten(color, 45);
           const dark = darken(color, 35);
           return [
-            <radialGradient key={`bloom-${c.id}`} id={`bloom-${c.id.replace(/\s/g, "-")}`}>
+            <radialGradient key={`bloom-${s.locationId}`} id={`bloom-${s.locationId}`}>
               <stop offset="0%" stopColor={cs} stopOpacity={0.8} />
               <stop offset="35%" stopColor={cs} stopOpacity={0.3} />
               <stop offset="100%" stopColor={cs} stopOpacity={0} />
             </radialGradient>,
-            <radialGradient
-              key={`face-${c.id}`}
-              id={`face-${c.id.replace(/\s/g, "-")}`}
-              cx="40%" cy="35%"
-            >
+            <radialGradient key={`face-${s.locationId}`} id={`face-${s.locationId}`} cx="40%" cy="35%">
               <stop offset="0%" stopColor={light} />
               <stop offset="60%" stopColor={cs} />
               <stop offset="100%" stopColor={dark} />
@@ -268,23 +235,14 @@ export default function ArenaMap({ heatState, activeLocations, bestLocation, onN
       </defs>
 
       {/* ════════════════ CONCOURSE ════════════════ */}
-      <path
-        d={concoursePath}
-        fill="var(--arena-concourse)"
-        stroke="var(--arena-concourse-stroke)"
-        strokeWidth="1.5"
-      />
+      <path d={concoursePath} fill="var(--arena-concourse)" stroke="var(--arena-concourse-stroke)" strokeWidth="1.5" />
 
       {Array.from({ length: 24 }).map((_, i) => {
         const angle = (i / 24) * Math.PI * 2;
         const inner = { x: CX + Math.cos(angle) * (BOWL_HW + 4), y: CY + Math.sin(angle) * (BOWL_HH + 4) };
         const outer = { x: CX + Math.cos(angle) * (CONC_HW - 2), y: CY + Math.sin(angle) * (CONC_HH - 2) };
         return (
-          <line
-            key={`ct-${i}`}
-            x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y}
-            stroke="var(--arena-concourse-line)" strokeWidth="0.5" opacity="0.4"
-          />
+          <line key={`ct-${i}`} x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke="var(--arena-concourse-line)" strokeWidth="0.5" opacity="0.4" />
         );
       })}
 
@@ -296,14 +254,7 @@ export default function ArenaMap({ heatState, activeLocations, bestLocation, onN
         const tHH = RINK_HH + BOWL_PAD * t + 6;
         const tCR = CORNER_R + BOWL_PAD * t + 6;
         return (
-          <path
-            key={`tier-${i}`}
-            d={rrectPath(CX, CY, tHW, tHH, tCR)}
-            fill="none"
-            stroke="var(--arena-tier-line)"
-            strokeWidth="0.6"
-            opacity={0.4 + i * 0.15}
-          />
+          <path key={`tier-${i}`} d={rrectPath(CX, CY, tHW, tHH, tCR)} fill="none" stroke="var(--arena-tier-line)" strokeWidth="0.6" opacity={0.4 + i * 0.15} />
         );
       })}
 
@@ -312,7 +263,8 @@ export default function ArenaMap({ heatState, activeLocations, bestLocation, onN
           key={`sec-${sec.number}`}
           x={sec.x} y={sec.y}
           textAnchor="middle" dominantBaseline="middle"
-          fill="var(--arena-section-text)" fontSize="8.5"
+          fill={String(sec.number) === inSeatSection ? "var(--accent-gold)" : "var(--arena-section-text)"}
+          fontSize="8.5"
           fontFamily="'JetBrains Mono', 'SF Mono', ui-monospace, monospace"
           fontWeight="600"
         >
@@ -328,24 +280,19 @@ export default function ArenaMap({ heatState, activeLocations, bestLocation, onN
       <path d={rinkPath} fill="url(#ice)" />
       <path d={rinkPath} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
 
-      {/* Center red line */}
       <line x1={CX} y1={CY - RINK_HH + 4} x2={CX} y2={CY + RINK_HH - 4} stroke="#c41e3a" strokeWidth="3" opacity="0.85" />
       <line x1={CX - 1.8} y1={CY - RINK_HH + 4} x2={CX - 1.8} y2={CY + RINK_HH - 4} stroke="#fff" strokeWidth="0.5" opacity="0.4" />
       <line x1={CX + 1.8} y1={CY - RINK_HH + 4} x2={CX + 1.8} y2={CY + RINK_HH - 4} stroke="#fff" strokeWidth="0.5" opacity="0.4" />
 
-      {/* Blue lines */}
       <line x1={CX - 55} y1={CY - RINK_HH + 4} x2={CX - 55} y2={CY + RINK_HH - 4} stroke="#0047ab" strokeWidth="3.5" opacity="0.9" />
       <line x1={CX + 55} y1={CY - RINK_HH + 4} x2={CX + 55} y2={CY + RINK_HH - 4} stroke="#0047ab" strokeWidth="3.5" opacity="0.9" />
 
-      {/* Goal lines */}
       <line x1={CX - RINK_HW + 24} y1={CY - RINK_HH + 4} x2={CX - RINK_HW + 24} y2={CY + RINK_HH - 4} stroke="#c41e3a" strokeWidth="1.2" opacity="0.5" />
       <line x1={CX + RINK_HW - 24} y1={CY - RINK_HH + 4} x2={CX + RINK_HW - 24} y2={CY + RINK_HH - 4} stroke="#c41e3a" strokeWidth="1.2" opacity="0.5" />
 
-      {/* Center circle */}
       <circle cx={CX} cy={CY} r={24} fill="none" stroke="#0047ab" strokeWidth="1.5" opacity="0.8" />
       <circle cx={CX} cy={CY} r={2.5} fill="#0047ab" opacity="0.9" />
 
-      {/* End zone faceoff circles */}
       {endZoneDots.map(([fx, fy], i) => (
         <g key={`efc-${i}`}>
           <circle cx={fx} cy={fy} r={20} fill="none" stroke="#c41e3a" strokeWidth="1.2" opacity="0.5" />
@@ -357,22 +304,13 @@ export default function ArenaMap({ heatState, activeLocations, bestLocation, onN
         </g>
       ))}
 
-      {/* Neutral zone dots */}
       {neutralDots.map(([fx, fy], i) => (
         <circle key={`nd-${i}`} cx={fx} cy={fy} r={2.5} fill="#c41e3a" opacity="0.6" />
       ))}
 
-      {/* Goal creases */}
-      <path
-        d={`M ${CX - RINK_HW + 24} ${CY - 12} A 14 14 0 0 1 ${CX - RINK_HW + 24} ${CY + 12}`}
-        fill="#8fb8de" fillOpacity="0.25" stroke="#0047ab" strokeWidth="1" opacity="0.6"
-      />
-      <path
-        d={`M ${CX + RINK_HW - 24} ${CY - 12} A 14 14 0 0 0 ${CX + RINK_HW - 24} ${CY + 12}`}
-        fill="#8fb8de" fillOpacity="0.25" stroke="#0047ab" strokeWidth="1" opacity="0.6"
-      />
+      <path d={`M ${CX - RINK_HW + 24} ${CY - 12} A 14 14 0 0 1 ${CX - RINK_HW + 24} ${CY + 12}`} fill="#8fb8de" fillOpacity="0.25" stroke="#0047ab" strokeWidth="1" opacity="0.6" />
+      <path d={`M ${CX + RINK_HW - 24} ${CY - 12} A 14 14 0 0 0 ${CX + RINK_HW - 24} ${CY + 12}`} fill="#8fb8de" fillOpacity="0.25" stroke="#0047ab" strokeWidth="1" opacity="0.6" />
 
-      {/* Goal nets */}
       <rect x={CX - RINK_HW + 10} y={CY - 6} width={7} height={12} rx={2} fill="none" stroke="#888" strokeWidth="1.2" opacity="0.6" />
       {[11, 13, 15].map((dx) => (
         <line key={`nl-${dx}`} x1={CX - RINK_HW + dx} y1={CY - 5} x2={CX - RINK_HW + dx} y2={CY + 5} stroke="#aaa" strokeWidth="0.3" opacity="0.5" />
@@ -382,151 +320,89 @@ export default function ArenaMap({ heatState, activeLocations, bestLocation, onN
         <line key={`nr-${dx}`} x1={CX + RINK_HW + dx} y1={CY - 5} x2={CX + RINK_HW + dx} y2={CY + 5} stroke="#aaa" strokeWidth="0.3" opacity="0.5" />
       ))}
 
-      {/* Center ice logo */}
-      <text
-        x={CX} y={CY + 1}
-        textAnchor="middle" dominantBaseline="middle"
-        fill="#c5a94e" fontSize="18" fontWeight="bold" opacity="0.12"
-        fontFamily="'Georgia', serif"
-      >
+      <text x={CX} y={CY + 1} textAnchor="middle" dominantBaseline="middle" fill="var(--accent-gold)" fontSize="18" fontWeight="bold" opacity="0.12" fontFamily="'Georgia', serif">
         ROYALS
       </text>
 
-      {/* ════════════════ CONCESSION NODES (Circles) ════════════════ */}
-      {CONCESSIONS.map((c) => {
-        const heat = heatState[c.id] || 0;
+      {/* ════════════════ STAND NODES ════════════════ */}
+      {nodes.map((s) => {
+        const heat = (s.heatmapKey && heatState[s.heatmapKey]) || 0;
         const color = heatToColor(heat);
         const cs = colorToString(color);
         const bloomSize = 34 + heat * 48;
         const isHot = heat > 0.4;
-        const isDimmed = activeLocations !== null && !activeLocations.has(c.id);
-        const isBest = bestLocation === c.id;
+        const isDimmed = activeLocations !== null && s.heatmapKey !== null && !activeLocations.has(s.heatmapKey);
+        const isBest = s.heatmapKey !== null && bestLocation === s.heatmapKey;
 
-        const isTop = c.y < CY;
-        const labelY = isTop ? c.y - NODE_R - 8 : c.y + NODE_R + 12;
-        const goLabelY = isTop ? c.y - NODE_R - 20 : c.y + NODE_R + 24;
+        const isTop = s.y < CY;
+        const labelY = isTop ? s.y - NODE_R - 8 : s.y + NODE_R + 12;
+        const goLabelY = isTop ? s.y - NODE_R - 20 : s.y + NODE_R + 24;
 
-        const faceId = `face-${c.id.replace(/\s/g, "-")}`;
-        const bloomId = `bloom-${c.id.replace(/\s/g, "-")}`;
+        const badge = s.role === "in_seat" ? `SEC ${inSeatSection}` : "PICKUP";
 
         return (
           <g
-            key={c.id}
+            key={s.locationId}
             style={{
-              opacity: isDimmed ? 0.12 : 1,
+              opacity: isDimmed ? 0.12 : s.isOpen ? 1 : 0.4,
               transition: "opacity 0.4s ease",
               cursor: isDimmed ? "default" : "pointer",
             }}
-            onClick={() => { if (!isDimmed && onNodeClick) onNodeClick(c.id); }}
+            onClick={() => { if (!isDimmed && onNodeClick) onNodeClick(s.locationId); }}
           >
-            {/* Best-location pulsing ring */}
             {isBest && (
-              <circle cx={c.x} cy={c.y} r={NODE_R + 5}
-                fill="none" stroke="#c5a94e" strokeWidth="2.5"
-                style={{ animation: "pulse-ring 1.5s ease-in-out infinite" }}
-              />
+              <circle cx={s.x} cy={s.y} r={NODE_R + 5} fill="none" stroke="var(--accent-gold)" strokeWidth="2.5" style={{ animation: "pulse-ring 1.5s ease-in-out infinite" }} />
             )}
 
-            {/* Heat bloom — static size, opacity-only pulse */}
-            <circle
-              cx={c.x} cy={c.y} r={bloomSize}
-              fill={`url(#${bloomId})`}
-              style={isHot ? { animation: "pulse-glow 2.5s ease-in-out infinite" } : { opacity: 0.5 }}
-            />
+            <circle cx={s.x} cy={s.y} r={bloomSize} fill={`url(#bloom-${s.locationId})`} style={isHot ? { animation: "pulse-glow 2.5s ease-in-out infinite" } : { opacity: 0.5 }} />
 
-            {/* Tight glow ring hugging the node — visible only when hot */}
             {isHot && (
-              <circle
-                cx={c.x} cy={c.y} r={NODE_R + 3}
-                fill="none"
-                stroke={cs}
-                strokeWidth="4"
-                opacity="0.4"
-                style={{ animation: "glow-ring 2.5s ease-in-out infinite" }}
-              />
+              <circle cx={s.x} cy={s.y} r={NODE_R + 3} fill="none" stroke={cs} strokeWidth="4" opacity="0.4" style={{ animation: "glow-ring 2.5s ease-in-out infinite" }} />
             )}
 
-            {/* Connector to bowl */}
             {(() => {
-              const angle = Math.atan2(c.y - CY, c.x - CX);
+              const angle = Math.atan2(s.y - CY, s.x - CX);
               const ex = CX + Math.cos(angle) * (BOWL_HW - 4);
               const ey = CY + Math.sin(angle) * (BOWL_HH - 4);
-              return (
-                <line
-                  x1={c.x} y1={c.y} x2={ex} y2={ey}
-                  stroke={cs} strokeWidth="1.2"
-                  opacity="var(--arena-connector-opacity)"
-                  strokeDasharray="4 3"
-                />
-              );
+              return <line x1={s.x} y1={s.y} x2={ex} y2={ey} stroke={cs} strokeWidth="1.2" opacity="var(--arena-connector-opacity)" strokeDasharray="4 3" />;
             })()}
 
-            {/* Node circle */}
             <circle
-              cx={c.x} cy={c.y} r={NODE_R}
-              fill={`url(#${faceId})`}
-              stroke={isBest ? "#c5a94e" : "var(--arena-node-stroke)"}
+              cx={s.x} cy={s.y} r={NODE_R}
+              fill={`url(#face-${s.locationId})`}
+              stroke={isBest ? "var(--accent-gold)" : "var(--arena-node-stroke)"}
               strokeWidth={isBest ? 3 : 2}
-              filter={isBest ? "url(#gold-glow)" : "url(#node-shadow)"}
+              filter={isBest ? "url(#best-glow)" : "url(#node-shadow)"}
               style={{ transition: "fill 0.5s ease" }}
             />
 
-            {/* Label inside node */}
-            <text
-              x={c.x} y={c.y + 1}
-              textAnchor="middle" dominantBaseline="middle"
-              fill="#fff" fontSize="7.5" fontWeight="800"
-              fontFamily="'JetBrains Mono', 'SF Mono', ui-monospace, monospace"
-              style={{ textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}
-            >
-              {c.shortLabel}
+            <text x={s.x} y={s.y + 1} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize="7" fontWeight="800" fontFamily="'JetBrains Mono', 'SF Mono', ui-monospace, monospace" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}>
+              {s.displayName.length > 12 ? `${s.displayName.slice(0, 11)}…` : s.displayName}
             </text>
 
-            {/* Label outside node */}
-            <text
-              x={c.x} y={labelY}
-              textAnchor="middle"
-              fill="var(--arena-section-text)" fontSize="6.5"
-              fontFamily="'JetBrains Mono', 'SF Mono', ui-monospace, monospace"
-              fontWeight="500"
-            >
-              {c.label}
+            <text x={s.x} y={labelY} textAnchor="middle" fill="var(--arena-section-text)" fontSize="6.5" fontFamily="'JetBrains Mono', 'SF Mono', ui-monospace, monospace" fontWeight="500">
+              {s.displayName}
             </text>
 
-            {/* Section reference */}
-            <text
-              x={c.x} y={isTop ? labelY - 9 : labelY + 9}
-              textAnchor="middle"
-              fill="var(--arena-section-text)" fontSize="5.5" opacity="0.6"
-              fontFamily="'JetBrains Mono', 'SF Mono', ui-monospace, monospace"
-            >
-              SEC {c.section}
+            <text x={s.x} y={isTop ? labelY - 9 : labelY + 9} textAnchor="middle" fill="var(--arena-section-text)" fontSize="5.5" opacity="0.6" fontFamily="'JetBrains Mono', 'SF Mono', ui-monospace, monospace">
+              {badge}{!s.isOpen ? " · CLOSED" : ""}
             </text>
 
-            {/* GO HERE indicator */}
             {isBest && (
-              <text x={c.x} y={goLabelY} textAnchor="middle" dominantBaseline="middle"
-                fill="#c5a94e" fontSize="8" fontWeight="bold"
-                fontFamily="'JetBrains Mono', 'SF Mono', ui-monospace, monospace"
-                style={{ animation: "pulse-ring 1.5s ease-in-out infinite" }}>
+              <text x={s.x} y={goLabelY} textAnchor="middle" dominantBaseline="middle" fill="var(--accent-gold)" fontSize="8" fontWeight="bold" fontFamily="'JetBrains Mono', 'SF Mono', ui-monospace, monospace" style={{ animation: "pulse-ring 1.5s ease-in-out infinite" }}>
                 GO HERE
               </text>
             )}
 
-            {/* Transaction count badge */}
-            {stats && stats.perLocation[c.id] && stats.perLocation[c.id].transactionCount > 0 && (() => {
-              const count = stats.perLocation[c.id].transactionCount;
+            {stats && s.heatmapKey && stats.perLocation[s.heatmapKey] && stats.perLocation[s.heatmapKey].transactionCount > 0 && (() => {
+              const count = stats.perLocation[s.heatmapKey!].transactionCount;
               const label = count >= 1000 ? `${(count / 1000).toFixed(1)}k` : String(count);
-              const badgeX = c.x + 14;
-              const badgeY = c.y - 14;
+              const badgeX = s.x + 14;
+              const badgeY = s.y - 14;
               return (
                 <>
-                  <circle cx={badgeX} cy={badgeY} r={9}
-                    fill="var(--arena-badge-bg)" stroke="var(--arena-badge-stroke)" strokeWidth="1.5" />
-                  <text x={badgeX} y={badgeY + 0.5}
-                    textAnchor="middle" dominantBaseline="middle"
-                    fill="var(--arena-badge-text)" fontSize="5.5" fontWeight="800"
-                    fontFamily="'JetBrains Mono', 'SF Mono', ui-monospace, monospace">
+                  <circle cx={badgeX} cy={badgeY} r={9} fill="var(--arena-badge-bg)" stroke="var(--arena-badge-stroke)" strokeWidth="1.5" />
+                  <text x={badgeX} y={badgeY + 0.5} textAnchor="middle" dominantBaseline="middle" fill="var(--arena-badge-text)" fontSize="5.5" fontWeight="800" fontFamily="'JetBrains Mono', 'SF Mono', ui-monospace, monospace">
                     {label}
                   </text>
                 </>

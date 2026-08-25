@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import ArenaMap from "@/components/ArenaMap";
+import ArenaMap, { MapStand } from "@/components/ArenaMap";
 import ConcessionList from "@/components/ConcessionList";
 import CategoryFilter from "@/components/CategoryFilter";
-import VendorDetail from "@/components/VendorDetail";
+import OrderPanel from "@/components/OrderPanel";
 import BestTimeCard from "@/components/DemandTimeline";
 import ThemeToggle from "@/components/ThemeToggle";
 import {
@@ -14,20 +14,11 @@ import {
 } from "@/lib/simulation";
 import { GameData, GameIndex, HeatState, SimulationStats, Transaction } from "@/lib/types";
 import { FanCategory, getDataCategories, getActiveLocations } from "@/lib/categories";
-import { buildVendorMenu, MenuItem } from "@/lib/vendorMenu";
 import { findBestTimes } from "@/lib/demandTimeline";
 
-// Lookup table for concession display names
-const VENDOR_NAMES: Record<string, { label: string; shortLabel: string }> = {
-  "SOFMC Phillips Bar":      { label: "Phillips Bar",      shortLabel: "Bar" },
-  "SOFMC ReMax Fan Deck":    { label: "ReMax Fan Deck",    shortLabel: "Fan Deck" },
-  "SOFMC Portable Stations": { label: "Portable Stations", shortLabel: "Portable" },
-  "SOFMC Island Slice":      { label: "Island Slice",      shortLabel: "Pizza" },
-  "SOFMC Island Canteen":    { label: "Island Canteen",    shortLabel: "Canteen" },
-  "SOFMC TacoTacoTaco":      { label: "TacoTacoTaco",      shortLabel: "Tacos" },
-};
-
 export default function Home() {
+  const [stands, setStands] = useState<MapStand[]>([]);
+  const [inSeatSection, setInSeatSection] = useState("108");
   const [gameIndex, setGameIndex] = useState<GameIndex | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [heatState, setHeatState] = useState<HeatState>({});
@@ -37,15 +28,20 @@ export default function Home() {
   const [stats, setStats] = useState<SimulationStats | null>(null);
   const [speed, setSpeed] = useState<number>(120);
   const [selectedCategory, setSelectedCategory] = useState<FanCategory>("all");
-  const [selectedVendor, setSelectedVendor] = useState<string | null>(null);
+  const [selectedStandId, setSelectedStandId] = useState<string | null>(null);
   const [txVersion, setTxVersion] = useState(0);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const engineRef = useRef<SimulationEngine | null>(null);
   const gameTransactions = useRef<Transaction[]>([]);
 
+  const standHeatKeys = useMemo(
+    () => stands.map((s) => s.heatmapKey).filter((k): k is string => k !== null),
+    [stands]
+  );
+
   const activeLocations = useMemo(
-    () => getActiveLocations(selectedCategory),
-    [selectedCategory]
+    () => getActiveLocations(selectedCategory, standHeatKeys),
+    [selectedCategory, standHeatKeys]
   );
 
   const bestLocation = useMemo(() => {
@@ -67,28 +63,33 @@ export default function Home() {
     return minLoc;
   }, [heatState, selectedCategory, activeLocations]);
 
-  const vendorMenu = useMemo((): MenuItem[] => {
-    if (!selectedVendor) return [];
-    return buildVendorMenu(gameTransactions.current, selectedVendor).items;
-  }, [selectedVendor]);
+  const selectedStand = stands.find((s) => s.locationId === selectedStandId) ?? null;
+  const selectedStandHeat = selectedStand?.heatmapKey ? heatState[selectedStand.heatmapKey] || 0 : 0;
 
   // Compute best/worst times based on selected category or vendor
   const categoryFilter = useMemo(() => getDataCategories(selectedCategory), [selectedCategory]);
   const bestTimeResult = useMemo(
     () => findBestTimes(gameTransactions.current, {
       categories: categoryFilter,
-      location: selectedVendor,
+      location: selectedStand?.heatmapKey ?? null,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [txVersion, selectedCategory, selectedVendor]
+    [txVersion, selectedCategory, selectedStandId]
   );
-  const bestTimeContext = selectedVendor && VENDOR_NAMES[selectedVendor]
-    ? VENDOR_NAMES[selectedVendor].label
+  const bestTimeContext = selectedStand
+    ? selectedStand.displayName
     : selectedCategory === "all"
       ? "any concession"
       : selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1);
 
   useEffect(() => {
+    fetch("/api/stands")
+      .then((r) => r.json())
+      .then((data: { stands: MapStand[]; inSeatPhysicalSection: string }) => {
+        setStands(data.stands);
+        setInSeatSection(data.inSeatPhysicalSection);
+      });
+
     fetch("/data/games/index.json")
       .then((r) => r.json())
       .then((data: GameIndex) => {
@@ -136,7 +137,6 @@ export default function Home() {
     const response = await fetch(`/data/games/${selectedDate}.json`);
     const gameData: GameData = await response.json();
 
-    // Store transactions for vendor menu building and demand timeline
     gameTransactions.current = gameData.transactions;
     setTxVersion((v) => v + 1);
 
@@ -179,7 +179,7 @@ export default function Home() {
             Victoria Royals
           </p>
           <p className="text-sm" style={{ color: "var(--text-tertiary)" }}>
-            Find the shortest line
+            Find the shortest line, then order
           </p>
         </div>
         <ThemeToggle />
@@ -207,11 +207,13 @@ export default function Home() {
       {viewMode === "map" ? (
         <>
           <ArenaMap
+            stands={stands}
             heatState={heatState}
             activeLocations={activeLocations}
             bestLocation={bestLocation}
-            onNodeClick={setSelectedVendor}
+            onNodeClick={setSelectedStandId}
             stats={stats}
+            inSeatSection={inSeatSection}
           />
 
           <div className="flex items-center gap-2 mt-4 mb-2">
@@ -226,11 +228,13 @@ export default function Home() {
       ) : (
         <div className="w-full mb-4">
           <ConcessionList
+            stands={stands}
             heatState={heatState}
             activeLocations={activeLocations}
             bestLocation={bestLocation}
-            onNodeClick={setSelectedVendor}
+            onNodeClick={setSelectedStandId}
             stats={stats}
+            inSeatSection={inSeatSection}
           />
         </div>
       )}
@@ -314,14 +318,12 @@ export default function Home() {
         </button>
       </div>
 
-      {/* Vendor detail panel */}
-      {selectedVendor && VENDOR_NAMES[selectedVendor] && (
-        <VendorDetail
-          name={VENDOR_NAMES[selectedVendor].label}
-          shortLabel={VENDOR_NAMES[selectedVendor].shortLabel}
-          heat={heatState[selectedVendor] || 0}
-          items={vendorMenu}
-          onClose={() => setSelectedVendor(null)}
+      {/* Order panel: live menu, cart and checkout for the selected stand */}
+      {selectedStand && (
+        <OrderPanel
+          stand={selectedStand}
+          heat={selectedStandHeat}
+          onClose={() => setSelectedStandId(null)}
         />
       )}
     </div>
