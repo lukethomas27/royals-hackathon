@@ -1,23 +1,17 @@
 "use client";
 
 import { HeatState, SimulationStats } from "@/lib/types";
+import { MapStand } from "./ArenaMap";
 
 interface ConcessionListProps {
+  stands: MapStand[];
   heatState: HeatState;
-  activeLocations: Set<string> | null;
-  bestLocation: string | null;
+  activeLocations: Set<string> | null; // heatmapKeys
+  bestLocation: string | null; // heatmapKey
   onNodeClick?: (locationId: string) => void;
   stats?: SimulationStats | null;
+  inSeatSection?: string;
 }
-
-const CONCESSIONS = [
-  { id: "SOFMC Island Canteen", label: "Island Canteen", shortLabel: "Canteen", section: "101" },
-  { id: "SOFMC Island Slice", label: "Island Slice", shortLabel: "Pizza", section: "105" },
-  { id: "SOFMC ReMax Fan Deck", label: "ReMax Fan Deck", shortLabel: "Fan Deck", section: "108" },
-  { id: "SOFMC TacoTacoTaco", label: "TacoTacoTaco", shortLabel: "Tacos", section: "113" },
-  { id: "SOFMC Phillips Bar", label: "Phillips Bar", shortLabel: "Bar", section: "112" },
-  { id: "SOFMC Portable Stations", label: "Portable Stations", shortLabel: "Portable", section: "117" },
-];
 
 function heatToColor(heat: number): string {
   const stops = [
@@ -54,38 +48,41 @@ function heatLabel(heat: number): string {
 }
 
 export default function ConcessionList({
+  stands,
   heatState,
   activeLocations,
   bestLocation,
   onNodeClick,
   stats,
+  inSeatSection = "108",
 }: ConcessionListProps) {
-  // Stable order: best location pinned to top, rest in fixed definition order
-  const sorted = [...CONCESSIONS].sort((a, b) => {
-    if (bestLocation === a.id) return -1;
-    if (bestLocation === b.id) return 1;
-    return 0;
+  // Stable order: best location pinned to top, rest in slot order
+  const sorted = [...stands].sort((a, b) => {
+    if (a.heatmapKey && bestLocation === a.heatmapKey) return -1;
+    if (b.heatmapKey && bestLocation === b.heatmapKey) return 1;
+    return a.slot - b.slot;
   });
 
   return (
     <div className="w-full space-y-2">
-      {sorted.map((c) => {
-        const heat = heatState[c.id] || 0;
+      {sorted.map((s) => {
+        const heat = (s.heatmapKey && heatState[s.heatmapKey]) || 0;
         const color = heatToColor(heat);
-        const isDimmed = activeLocations !== null && !activeLocations.has(c.id);
-        const isBest = bestLocation === c.id;
-        const txCount = stats?.perLocation[c.id]?.transactionCount || 0;
+        const isDimmed = activeLocations !== null && s.heatmapKey !== null && !activeLocations.has(s.heatmapKey);
+        const isBest = s.heatmapKey !== null && bestLocation === s.heatmapKey;
+        const txCount = (s.heatmapKey && stats?.perLocation[s.heatmapKey]?.transactionCount) || 0;
+        const badge = s.role === "in_seat" ? `Section ${inSeatSection}` : "Pickup";
 
         return (
           <button
-            key={c.id}
-            onClick={() => { if (!isDimmed && onNodeClick) onNodeClick(c.id); }}
+            key={s.locationId}
+            onClick={() => { if (!isDimmed && onNodeClick) onNodeClick(s.locationId); }}
             disabled={isDimmed}
             className="w-full rounded-xl px-4 py-3 flex items-center gap-3 transition-all"
             style={{
               backgroundColor: "var(--bg-elevated)",
-              border: isBest ? "2px solid #c5a94e" : "1px solid var(--border-subtle)",
-              opacity: isDimmed ? 0.3 : 1,
+              border: isBest ? "2px solid var(--accent-gold)" : "1px solid var(--border-subtle)",
+              opacity: isDimmed ? 0.3 : s.isOpen ? 1 : 0.5,
               cursor: isDimmed ? "default" : "pointer",
             }}
           >
@@ -99,19 +96,27 @@ export default function ConcessionList({
             <div className="flex-1 text-left min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>
-                  {c.label}
+                  {s.displayName}
                 </span>
                 {isBest && (
                   <span
                     className="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                    style={{ backgroundColor: "rgba(197,169,78,0.15)", color: "#c5a94e" }}
+                    style={{ backgroundColor: "var(--accent-gold-bg)", color: "var(--accent-gold-dim)" }}
                   >
                     BEST
                   </span>
                 )}
+                {!s.isOpen && (
+                  <span
+                    className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                    style={{ backgroundColor: "var(--heat-bar-bg)", color: "var(--text-tertiary)" }}
+                  >
+                    CLOSED
+                  </span>
+                )}
               </div>
               <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
-                Section {c.section}
+                {badge}
               </span>
             </div>
 

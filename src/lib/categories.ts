@@ -8,47 +8,14 @@ export const CATEGORY_OPTIONS: { value: FanCategory; label: string }[] = [
   { value: "snacks", label: "Snacks" },
 ];
 
-// Map fan-friendly categories to actual CSV data category values
+// Map fan-friendly categories to the historical CSV data's category values.
+// This only drives the heat-map / "best time to go" feature (section 10 of
+// the build doc — the carried-forward differentiator), not live ordering.
 const CATEGORY_DATA_MAP: Record<Exclude<FanCategory, "all">, string[]> = {
   food: ["Food"],
   beer: ["Beer"],
   drinks: ["NA Bev", "NA Bev PST Exempt", "Liquor", "Wine, Cider & Coolers"],
   snacks: ["Snack", "Snacks", "Sweets", "Extras"],
-};
-
-// Which locations actually sell each fan category (verified from data)
-// Food is the differentiator — Phillips Bar and Portable Stations don't sell food
-const CATEGORY_LOCATION_MAP: Record<Exclude<FanCategory, "all">, string[]> = {
-  food: [
-    "SOFMC Island Canteen",
-    "SOFMC Island Slice",
-    "SOFMC ReMax Fan Deck",
-    "SOFMC TacoTacoTaco",
-  ],
-  beer: [
-    "SOFMC Phillips Bar",
-    "SOFMC ReMax Fan Deck",
-    "SOFMC Portable Stations",
-    "SOFMC Island Slice",
-    "SOFMC Island Canteen",
-    "SOFMC TacoTacoTaco",
-  ],
-  drinks: [
-    "SOFMC Phillips Bar",
-    "SOFMC ReMax Fan Deck",
-    "SOFMC Portable Stations",
-    "SOFMC Island Slice",
-    "SOFMC Island Canteen",
-    "SOFMC TacoTacoTaco",
-  ],
-  snacks: [
-    "SOFMC Phillips Bar",
-    "SOFMC ReMax Fan Deck",
-    "SOFMC Portable Stations",
-    "SOFMC Island Slice",
-    "SOFMC Island Canteen",
-    "SOFMC TacoTacoTaco",
-  ],
 };
 
 /** Returns data category strings for simulation filtering, or null for "all". */
@@ -57,8 +24,23 @@ export function getDataCategories(fan: FanCategory): Set<string> | null {
   return new Set(CATEGORY_DATA_MAP[fan]);
 }
 
-/** Returns location IDs that serve this category, or null for "all". */
-export function getActiveLocations(fan: FanCategory): Set<string> | null {
+/**
+ * Which of the *currently launched* stands sell a category, for
+ * highlighting on the heat map. All four launch stands (build doc section
+ * 2) sell food, beer, drinks and snacks — the old prototype's
+ * food/beer/drinks/snacks split only mattered for Phillips Bar and Portable
+ * Stations, both dropped from launch scope. So today this is every active
+ * stand's heat-map key for every category; kept as a function (not a
+ * flattened constant) so a future stand that genuinely doesn't sell a
+ * category can be excluded without touching call sites.
+ *
+ * `standHeatKeys` comes from the live stand list (see
+ * src/lib/square/locations.ts Stand.heatmapKey) — never a hardcoded name.
+ */
+export function getActiveLocations(
+  fan: FanCategory,
+  standHeatKeys: string[]
+): Set<string> | null {
   if (fan === "all") return null;
-  return new Set(CATEGORY_LOCATION_MAP[fan]);
+  return new Set(standHeatKeys);
 }
