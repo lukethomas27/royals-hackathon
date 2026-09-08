@@ -1,8 +1,61 @@
-# Build status — Sep 7, 2026
+# Build status — Sep 8, 2026
 
 Written against `royals-app-build-context-v3.md` (the ArenaPulse project doc).
 This file tracks what's implemented, what's stubbed, and what still needs
-live Square access to finish or verify. Newest session first.
+doing. Newest session first. `HANDOFF.md` covers moving everything off
+Luke's personal accounts.
+
+## START HERE if you're picking this up from Luke (state as of Sep 8, 2026)
+
+The app is **on `main` and auto-deploys to Vercel**, project
+`royals-hackathon` on Luke's personal team (`lukethomas27s-projects`),
+production URL `royals-hackathon.vercel.app`. It reads the live Eventium
+Square catalog, creates Square orders, and gates ordering behind a staff
+open/close switch at `/staff`. **It does not take payment yet.** Do not put
+the URL on a QR code until it does.
+
+**Exactly where the Vercel config stands right now** (checked with
+`vercel env ls` on Sep 8):
+
+| Item | State | Who / how |
+|---|---|---|
+| 13 non-secret Square vars (env, app ID, 4 location IDs, in-seat config, heat-map keys) | ✅ set, Production + Preview | done |
+| `STAFF_PASSCODE` | ✅ set, **Production only** | Luke has the value. Add it to Preview too if you want `/staff` to work on PR previews |
+| `SQUARE_ACCESS_TOKEN` | ❌ **not set** | Square Developer console → app "Victoria Royals" → Credentials → Production access token → paste into Vercel as **Sensitive**. Until then production serves **mock** stands |
+| Upstash Redis store | ❌ **not provisioned** | Vercel → project → Storage → Upstash Redis (Marketplace) → connect. Injects `KV_REST_API_URL`/`TOKEN`. **Until then every `/api/stands` call in production returns 500** — deliberate, see Sep 8 notes below |
+| Production domain | ❌ none | Decide before printing QR codes |
+
+So the first two things to do are: paste the Square token, provision the
+Redis store, then **Redeploy** (env changes only apply to new deployments).
+Then run the 6-step smoke test in `HANDOFF.md` §6.
+
+**After that, the build order is:**
+1. **Payment capture** — Square Web Payments SDK on the client (app ID is
+   already in `NEXT_PUBLIC_SQUARE_APPLICATION_ID`), `/v2/payments` on the
+   server using the order ID `/api/orders` already returns. Test in the
+   Square **sandbox** first (toggle at the top of the developer console;
+   the sandbox has no copy of Eventium's catalog, so seed a couple of
+   items there). No real order has ever been placed through this app.
+2. **First real order** — staff test on a quiet day, voided in Square.
+3. **Ownership transfer** — `HANDOFF.md`, in order.
+4. Nice-to-haves in "Still open" further down (seat picker live read,
+   hydration warning, auto-open from a game schedule).
+
+**Things you should know that aren't obvious from the code:**
+- Ordering is **closed by default**. Staff open each stand per game at
+  `/staff`. Runbook is in the Sep 7 section below.
+- The alcohol limit (2 drinks, 1 if 24oz) is enforced **only by this app**;
+  Square's own QR-ordering config for the Fan Deck says "No maximum".
+- Stand names are read live from Square and **will change** (they already
+  did once: Island Canteen / Slice / TacoTacoTaco → Concession 1/2/3).
+  Nothing in the code keys off a name; don't start.
+- Local dev works with no env vars at all (mock data). With the token in
+  `.env.local` it hits **production** Square — reads only, unless you
+  submit the checkout form.
+- `npm run build` on Luke's machine needed `turbopack.root` pinned because
+  of a stray lockfile in his OneDrive folder. Harmless elsewhere.
+
+---
 
 ## Update — Sep 7, 2026: live Square account inspected (read-only)
 
