@@ -262,3 +262,45 @@ body {
   0% { transform: scale(0.8); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
 }
+
+/* Order panel buttons. Inline `style` backgrounds can't express :hover, so
+   these live here. "Add" reads as an actionable gold outline at rest,
+   fills gold on hover/focus, and is unmistakably dimmed + struck when the
+   stand is closed - a resting grey button was being read as "sold out". */
+.btn-add {
+  background-color: var(--accent-gold-bg);
+  color: var(--accent-gold);
+  border: 1px solid var(--accent-gold);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, transform 80ms ease;
+}
+.btn-add:hover:not(:disabled),
+.btn-add:focus-visible:not(:disabled) {
+  background-color: var(--accent-gold);
+  color: var(--btn-active-text);
+  outline: none;
+}
+.btn-add:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.btn-add:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+.btn-qty {
+  background-color: var(--btn-bg);
+  color: var(--btn-text);
+  border: 1px solid var(--btn-border);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.btn-qty:hover,
+.btn-qty:focus-visible {
+  background-color: var(--accent-gold);
+  color: var(--btn-active-text);
+  border-color: var(--accent-gold);
+  outline: none;
+}
+

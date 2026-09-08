@@ -208,7 +208,7 @@ export default function OrderPanel({ stand, heat, onClose }: OrderPanelProps) {
                         <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{item.name}</span>
                         {alcoholic && (
                           <span className="text-[9px] font-bold px-1 py-0.5 rounded" style={{ backgroundColor: "var(--heat-bar-bg)", color: "var(--text-tertiary)" }}>
-                            21+ · ID CHECKED
+                            19+ · ID CHECKED
                           </span>
                         )}
                       </div>
@@ -224,10 +224,11 @@ export default function OrderPanel({ stand, heat, onClose }: OrderPanelProps) {
                                 {v.priceMoney ? money(v.priceMoney.amount) : "—"}
                               </span>
                               <button
+                                type="button"
                                 disabled={!stand.isOpen}
                                 onClick={() => addToCart(item, v.id)}
-                                className="text-xs font-semibold px-2 py-1 rounded"
-                                style={{ backgroundColor: "var(--btn-bg)", color: "var(--btn-text)", opacity: stand.isOpen ? 1 : 0.5 }}
+                                className="btn-add text-xs font-semibold px-2.5 py-1 rounded"
+                                aria-label={`Add ${item.name} ${v.name}`}
                               >
                                 Add
                               </button>
@@ -264,9 +265,9 @@ export default function OrderPanel({ stand, heat, onClose }: OrderPanelProps) {
                     <div className="text-xs" style={{ color: "var(--text-tertiary)" }}>{l.variation.priceMoney ? money(l.variation.priceMoney.amount) : ""}</div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => changeQty(l.variation.id, -1)} className="w-6 h-6 rounded" style={{ backgroundColor: "var(--btn-bg)" }}>−</button>
+                    <button type="button" onClick={() => changeQty(l.variation.id, -1)} className="btn-qty w-6 h-6 rounded" aria-label="Remove one">−</button>
                     <span className="text-sm w-4 text-center">{l.quantity}</span>
-                    <button onClick={() => changeQty(l.variation.id, 1)} className="w-6 h-6 rounded" style={{ backgroundColor: "var(--btn-bg)" }}>+</button>
+                    <button type="button" onClick={() => changeQty(l.variation.id, 1)} className="btn-qty w-6 h-6 rounded" aria-label="Add one">+</button>
                   </div>
                 </div>
               ))}

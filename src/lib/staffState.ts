@@ -79,6 +79,14 @@ export async function setStandOrderingState(
  * wins (section 6a: "the manual switch is the real control, the schedule
  * is the safety net, not the other way around"). Absent an override, falls
  * back to the scheduled cutoff.
+ *
+ * FAIL CLOSED (changed 2026-09-07): with no override and no cutoff set, a
+ * stand is CLOSED. This app is reachable from a public URL around the
+ * clock, but fans may only order while a game is on and staff are at the
+ * stand — so ordering is something staff switch ON per game at /staff,
+ * never something that is on by default. A cutoff on its own (no
+ * override) opens the stand until that time, which is the "pre-set
+ * tonight's close, then flip Open at doors" flow.
  */
 export function isOrderingOpen(state: StandOrderingState, now: Date = new Date()): boolean {
   if (state.manualOverride === "open") return true;
@@ -86,5 +94,5 @@ export function isOrderingOpen(state: StandOrderingState, now: Date = new Date()
   if (state.scheduledCutoff) {
     return now.getTime() < new Date(state.scheduledCutoff).getTime();
   }
-  return true; // no schedule set yet — default open
+  return false; // nothing set = closed, never open by accident
 }

@@ -1,11 +1,8 @@
 // Thin fetch wrapper around the Square REST API.
 //
-// This app has no live Square credentials in this build session (see
-// STATUS.md). It is written against the real API shape so that dropping in
-// SQUARE_ACCESS_TOKEN is the only step needed to go live — but the exact
-// response shapes for a couple of fields (ecom visibility, self-serve,
-// Ordering Stations) are unverified against Eventium's actual account and
-// are flagged where they're used.
+// First exercised against Eventium's live production account on 2026-09-07
+// (see STATUS.md): locations, SearchCatalogItems, batch-retrieve all verified.
+// Order creation and payments are still unexercised live.
 
 const SQUARE_VERSION = "2025-01-23";
 
