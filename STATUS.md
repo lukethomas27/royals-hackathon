@@ -191,14 +191,49 @@ catalog. Same for payments.
 5. Not built and worth deciding: an auto-open (e.g. from a game schedule)
    and a "kitchen/register acknowledged" step. Today both are humans.
 
+### Sep 8, 2026 — Vercel wiring + durable staff state
+
+**Vercel.** The repo is already linked to Vercel project `royals-hackathon`
+(team `lukethomas27s-projects`): `main` auto-deploys to production at
+`royals-hackathon.vercel.app`, every PR gets a preview. As of this morning
+the project had **zero** environment variables, so production was serving
+the mock stands. Added via `vercel env add` to Production + Preview: the
+13 non-secret vars (`SQUARE_ENVIRONMENT`, `NEXT_PUBLIC_SQUARE_APPLICATION_ID`,
+the 4 `SQUARE_STAND_SLOT_*_LOCATION_ID`, the 3 `SQUARE_INSEAT_*`, the 4
+`SQUARE_STAND_SLOT_*_HEATMAP_KEY`). **Luke still has to add, as Sensitive:
+`SQUARE_ACCESS_TOKEN` and `STAFF_PASSCODE`.** Without the token the deploy
+runs on mock data; without the passcode `/staff` is public.
+(`vercel link` also appended a `VERCEL_OIDC_TOKEN` line to `.env.local`;
+harmless, gitignored.)
+
+**`@vercel/kv` → `@upstash/redis`.** Vercel KV is deprecated (npm warns on
+install), so `src/lib/staffState.ts` now uses the Upstash REST client
+directly. Accepts either env naming — the Marketplace integration's
+`KV_REST_API_URL`/`KV_REST_API_TOKEN` or Upstash's
+`UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN`. Same key layout as
+before, so an existing store carries over. **New behaviour: in production
+(`VERCEL=1` or `NODE_ENV=production`) with no Redis configured, the staff
+state code throws instead of silently using the on-disk file** — verified
+with `next start`: `/api/stands` and `/api/staff/status` return 500 with a
+message naming the missing env vars. Dev file fallback unchanged and
+re-verified. **Action for Luke: Vercel → Storage → Upstash Redis
+(Marketplace, free tier is fine) → connect to this project.** Until that's
+done, a deploy of this branch will 500 on the stand list — deliberately.
+
+**`next.config.ts`: `turbopack.root` pinned to the repo.** `npm run build`
+was failing locally because Next inferred the workspace root as the OneDrive
+*Documents* folder (a stray `package-lock.json` lives there) and then timed
+out resolving `react` through OneDrive cloud files (os error 426). Pinning
+the root fixes it; Vercel never hit this. Build now passes: 10 routes, all
+`/api/*` dynamic.
+
 **Still open:**
 1. Payment capture (Web Payments SDK + Payments API). Unblocked: app ID is
    in `.env.local` as `NEXT_PUBLIC_SQUARE_APPLICATION_ID`.
 2. `stations.ts`: wire the public seat-groups endpoint (above) for the
    live section list; optionally find the storefront's per-seat lookup.
-3. `@vercel/kv` is **deprecated** (npm warns on install; Vercel moved KV to
-   Upstash Redis via the Marketplace). Swap `staffState.ts` to `@upstash/redis`
-   or Vercel's replacement before provisioning anything.
+3. ~~`@vercel/kv` is deprecated~~ — swapped to `@upstash/redis` on Sep 8
+   (see above); the store itself still needs provisioning in Vercel.
 4. Pre-existing dev-only React hydration warning on `/` — floating-point
    SVG coordinates in `ArenaMap` differ in the last digit between server
    and client. Cosmetic; round the coordinates to fix.
