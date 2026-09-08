@@ -103,7 +103,7 @@ export default function StaffPage() {
       <div className="max-w-md mx-auto">
         <h1 className="text-xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>Staff ordering control</h1>
         <p className="text-xs mb-6" style={{ color: "var(--text-tertiary)" }}>
-          Manual switch always wins. Scheduled cutoff is the fallback if nobody flips it.
+          Stands are CLOSED until you open them. Manual switch always wins; the scheduled cutoff is the fallback if nobody flips it back.
         </p>
 
         <div className="space-y-4">
