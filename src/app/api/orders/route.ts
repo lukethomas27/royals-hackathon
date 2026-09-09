@@ -73,6 +73,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Seat section, row and seat are required for delivery." }, { status: 400 });
     }
     const config = await getSeatPickerConfig();
+    if (config.mode === "unavailable") {
+      return NextResponse.json(
+        { error: "Live seat data is temporarily unavailable. Please try again or choose pickup." },
+        { status: 503 }
+      );
+    }
     const validation = validateSeatSelection(body.seat, config.validSections);
     if (!validation.ok) {
       return NextResponse.json({ error: validation.error }, { status: 400 });

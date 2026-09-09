@@ -215,6 +215,13 @@ export interface MenuResult {
   source: "live" | "mock";
 }
 
+/** Keep internal accounting labels out of the fan-facing menu. */
+export function fanCategoryName(categoryName: string | null): string | null {
+  if (!categoryName) return null;
+  if (categoryName.trim().toLowerCase() === "na bev pst exempt") return "NA Bev";
+  return categoryName;
+}
+
 /** The live menu for one stand, grouped implicitly by categoryName. */
 export async function getMenu(locationId: string): Promise<MenuResult> {
   if (!isSquareConfigured()) {
@@ -234,6 +241,7 @@ export function orderableItems(items: SquareCatalogItem[]): SquareCatalogItem[] 
     .filter((item) => item.onlineVisible)
     .map((item) => ({
       ...item,
+      categoryName: fanCategoryName(item.categoryName),
       variations: item.variations.filter((v) => !v.soldOut),
     }))
     .filter((item) => item.variations.length > 0);

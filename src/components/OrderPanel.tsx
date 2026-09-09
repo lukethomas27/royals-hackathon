@@ -29,7 +29,7 @@ function money(cents: number): string {
 type Phase = "menu" | "checkout" | "confirmation";
 
 interface SeatConfig {
-  mode: "live" | "fallback";
+  mode: "live" | "fallback" | "unavailable";
   validSections: string[];
 }
 
@@ -304,6 +304,11 @@ export default function OrderPanel({ stand, heat, onClose }: OrderPanelProps) {
                     Delivery is only available in sections {seatConfig.validSections.join(", ")}.
                   </p>
                 )}
+                {seatConfig?.mode === "unavailable" && (
+                  <p className="text-[10px] mb-2" style={{ color: "#ef4444" }}>
+                    Live seat data is temporarily unavailable. Please try again or choose pickup.
+                  </p>
+                )}
                 <div className="grid grid-cols-3 gap-2">
                   <input placeholder="Section" value={seat.section} onChange={(e) => setSeat({ ...seat, section: e.target.value })}
                     className="rounded px-2 py-2 text-sm border" style={{ backgroundColor: "var(--bg-input)", borderColor: "var(--border-default)", color: "var(--text-primary)" }} />
@@ -343,7 +348,7 @@ export default function OrderPanel({ stand, heat, onClose }: OrderPanelProps) {
               </button>
               <button
                 onClick={submitOrder}
-                disabled={submitting || !alcoholCheck.ok || !phone || (stand.role === "in_seat" && (!seat.section || !seat.row || !seat.seat))}
+                disabled={submitting || !alcoholCheck.ok || !phone || (stand.role === "in_seat" && (seatConfig?.mode === "unavailable" || !seat.section || !seat.row || !seat.seat))}
                 className="flex-1 py-3 rounded-lg font-semibold"
                 style={{ backgroundColor: "var(--accent-gold)", color: "var(--text-inverted)", opacity: submitting ? 0.6 : 1 }}
               >

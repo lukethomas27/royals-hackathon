@@ -1,4 +1,4 @@
-// Seat/row data for the in-seat delivery stand (sections 107-111 only).
+// Live section discovery from Square Online's public storefront endpoint.
 //
 // Per build doc section 6: Matt confirmed on Jul 28 that this data already
 // exists inside Square as "Ordering Stations" under the
@@ -6,25 +6,8 @@
 // hand-build a seat database was explicitly withdrawn. THE SEAT PICKER IS A
 // READ, NOT A DATA-MODELLING EXERCISE.
 //
-// UNRESOLVED (build doc's own words: "This is the one thing that could
-// still turn into manual data entry, so check it early rather than
-// assuming"): whether Ordering Stations are exposed through a public API at
-// all, or only visible in the Square Online site dashboard UI. Square does
-// not currently document a general "Ordering Stations" REST resource for
-// Square Online QR-ordering sites — this is very likely dashboard/site
-// configuration rather than Catalog/Locations data, which would mean it is
-// NOT reachable via the standard Square API this app otherwise uses.
-//
-// This module is written so that:
-//   1. If/when someone with Square dashboard access confirms an API (or a
-//      documented site-export mechanism) for Ordering Stations, the fetch
-//      goes in fetchLiveOrderingStations() below and getSeatOptions()
-//      starts returning real data with no caller-side changes needed.
-//   2. Until then, we do NOT hand-type the CLUB MAP seat list into this
-//      codebase (that would silently violate "no hardcoded seat maps" the
-//      moment Eventium changes the footprint). Instead the seat picker
-//      degrades to a constrained free-text prompt — section/row/seat —
-//      validated only against the safety-net section list in config.ts.
+// Embedded seats are truncated to ten per section. Never treat that sample
+// as a complete seat map; row/seat remain user entry.
 
 import { getInSeatSections } from "./config";
 
@@ -42,18 +25,38 @@ export interface OrderingStationsResult {
   sections?: string[];
 }
 
-/**
- * Attempts a live read. Returns "unavailable" today because there is no
- * confirmed API for this — see the file header. Once that's confirmed,
- * replace this body with the real call; nothing else in the app needs to
- * change (see getSeatOptions below).
- */
+interface SeatGroupResponse {
+  data?: { name?: string }[];
+  meta?: { pagination?: { total?: number; count?: number } };
+}
+
 export async function fetchLiveOrderingStations(): Promise<OrderingStationsResult> {
-  return { availability: "unavailable" };
+  const endpoint = process.env.SQUARE_ORDERING_STATIONS_URL;
+  if (!endpoint) return { availability: "unavailable" };
+  try {
+    const url = new URL(endpoint);
+    if (url.protocol !== "https:" || url.hostname !== "cdn5.editmysite.com") {
+      throw new Error("Ordering stations must use the verified Square Online endpoint.");
+    }
+    const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(8000) });
+    if (!response.ok) throw new Error(`Ordering stations returned ${response.status}`);
+    const result: SeatGroupResponse = await response.json();
+    if (!Array.isArray(result.data)) throw new Error("Invalid ordering stations response");
+    const total = result.meta?.pagination?.total;
+    if (total !== undefined && total > result.data.length) throw new Error("Incomplete section list");
+    const allowed = getInSeatSections();
+    const sections = [...new Set(result.data.flatMap((group) => {
+      const section = group.name?.match(/^Section\s+(\d+)$/i)?.[1];
+      return section && allowed.has(section) ? [section] : [];
+    }))];
+    return { availability: "live", sections };
+  } catch {
+    return { availability: "unavailable", sections: [] };
+  }
 }
 
 export interface SeatPickerConfig {
-  mode: "live" | "fallback";
+  mode: "live" | "fallback" | "unavailable";
   validSections: string[];
 }
 
@@ -62,6 +65,7 @@ export async function getSeatPickerConfig(): Promise<SeatPickerConfig> {
   if (live.availability === "live" && live.sections) {
     return { mode: "live", validSections: live.sections };
   }
+  if (process.env.SQUARE_ORDERING_STATIONS_URL) return { mode: "unavailable", validSections: [] };
   return { mode: "fallback", validSections: Array.from(getInSeatSections()) };
 }
 
