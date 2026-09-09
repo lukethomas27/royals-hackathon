@@ -6,6 +6,7 @@ menu + cart + checkout, 4 launch stands, seat delivery, staff open/close
 control). **Read STATUS.md before touching this** — it tracks what's real,
 what's stubbed, and what still needs live Square account access to verify.
 `HANDOFF.md` covers moving hosting/repo/secrets off Luke's personal accounts.
+`DEMO.md` is the run sheet + open decisions for demoing to the SOFMC team.
 
 ## Commands
 
