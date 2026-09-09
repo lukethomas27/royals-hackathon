@@ -45,6 +45,12 @@ const CONC_CR = BOWL_CR + CONCOURSE_PAD;
 // Node dimensions
 const NODE_R = 26;
 
+// Keep SVG attributes byte-for-byte stable between SSR and the browser.
+// Trigonometric calculations can differ in the last floating-point digit.
+function svgNumber(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
+
 // Purely geometric layout per slot (1-4) — carries no business name, see
 // src/lib/square/config.ts SLOT_LAYOUT for the rationale. Badge text is
 // "PICKUP" for pickup-role slots; the in-seat slot's badge is its real
@@ -80,8 +86,8 @@ function generateSections(): { number: number; x: number; y: number; angle: numb
   for (const sa of sectionAngles) {
     sections.push({
       number: sa.num,
-      x: CX + Math.cos(sa.angle) * midHW,
-      y: CY - Math.sin(sa.angle) * midHH,
+      x: svgNumber(CX + Math.cos(sa.angle) * midHW),
+      y: svgNumber(CY - Math.sin(sa.angle) * midHH),
       angle: sa.angle,
     });
   }
@@ -239,8 +245,8 @@ export default function ArenaMap({ stands, heatState, activeLocations, bestLocat
 
       {Array.from({ length: 24 }).map((_, i) => {
         const angle = (i / 24) * Math.PI * 2;
-        const inner = { x: CX + Math.cos(angle) * (BOWL_HW + 4), y: CY + Math.sin(angle) * (BOWL_HH + 4) };
-        const outer = { x: CX + Math.cos(angle) * (CONC_HW - 2), y: CY + Math.sin(angle) * (CONC_HH - 2) };
+        const inner = { x: svgNumber(CX + Math.cos(angle) * (BOWL_HW + 4)), y: svgNumber(CY + Math.sin(angle) * (BOWL_HH + 4)) };
+        const outer = { x: svgNumber(CX + Math.cos(angle) * (CONC_HW - 2)), y: svgNumber(CY + Math.sin(angle) * (CONC_HH - 2)) };
         return (
           <line key={`ct-${i}`} x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke="var(--arena-concourse-line)" strokeWidth="0.5" opacity="0.4" />
         );
@@ -362,8 +368,8 @@ export default function ArenaMap({ stands, heatState, activeLocations, bestLocat
 
             {(() => {
               const angle = Math.atan2(s.y - CY, s.x - CX);
-              const ex = CX + Math.cos(angle) * (BOWL_HW - 4);
-              const ey = CY + Math.sin(angle) * (BOWL_HH - 4);
+              const ex = svgNumber(CX + Math.cos(angle) * (BOWL_HW - 4));
+              const ey = svgNumber(CY + Math.sin(angle) * (BOWL_HH - 4));
               return <line x1={s.x} y1={s.y} x2={ex} y2={ey} stroke={cs} strokeWidth="1.2" opacity="var(--arena-connector-opacity)" strokeDasharray="4 3" />;
             })()}
 
