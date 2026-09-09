@@ -50,16 +50,17 @@ export interface SquareCatalogItem {
    * ordering surface for this location. This is the field we gate "can a fan
    * see it at all" on.
    *
-   * OPEN QUESTION (see STATUS.md): the exact Square API field backing the
-   * dashboard's "Online" column is unconfirmed against a live account. We
-   * read it defensively — see mapCatalogObjectToItem in catalog.ts.
+   * Maps to Square's `ecom_visibility` field, confirmed real and documented
+   * (see catalog.ts file header) — not yet checked against Eventium's
+   * actual CSV/dashboard since neither was available in this session.
    */
   onlineVisible: boolean;
   /**
    * Whether self-serve (kiosk/self-checkout) ordering is enabled for this
    * item. Per the build doc this is a *separate* flag from onlineVisible —
    * fifteen items have this off while still being online-orderable.
-   * Same open-question caveat as onlineVisible.
+   * CONFIRMED there is no Catalog API field for this (see catalog.ts file
+   * header) — always true here is the correct fallback, not a guess.
    */
   selfServeEnabled: boolean;
 }

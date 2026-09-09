@@ -5,6 +5,7 @@ Started as a hackathon queue-visualizer prototype; now being built out per
 menu + cart + checkout, 4 launch stands, seat delivery, staff open/close
 control). **Read STATUS.md before touching this** — it tracks what's real,
 what's stubbed, and what still needs live Square account access to verify.
+`HANDOFF.md` covers moving hosting/repo/secrets off Luke's personal accounts.
 
 ## Commands
 
