@@ -16,8 +16,8 @@ Tick the boxes as you go. Every command runs from the repo folder.
 | Server gates (laptop, live data) | 24/24 pass: auth 401/200, closed-by-default 409, 3 alcoholic → 400, 24oz+1 → 400, unknown variation 409, bad phone 400, empty cart 400, unknown stand 400, no seat 400, section 112 400, blank row 400, cross-stand item 409, past cutoff 409, future cutoff opens, no card 400, bad promo 400, qty 0 400. All stop before Square. |
 | Checkout UI (laptop, production SDK) | Card field renders; coupon applies → $0.00, card hidden; Place order not pressed. |
 | Production URL | **No Square token, no Redis** → empty stand list, mock menu. Passcode set. `/api/health` = `blocked`. |
-| Square order creation | **Never run live.** Payload now matches Square's fulfillment rules; proven in sandbox only once §1 is done. |
-| Payment | Card via Web Payments SDK + CreatePayment, and a 100% coupon (`ROYALS-TEST-0918`) that marks a $0 order paid. Both new tonight. |
+| Square order creation | Payload matches Square's fulfillment rules; **proven in the sandbox** (§6): pickup + delivery orders created, paid by card and by coupon, declined card cancels the order. Never run against production yet. |
+| Payment | Card via Web Payments SDK + CreatePayment, and a 100% coupon (`ROYALS-TEST-0918`) that marks a $0 order paid. Both new tonight, both verified in the sandbox incl. the real browser card field. |
 
 Square fact that shaped everything: **an API order only appears on the
 register, Order Manager or kitchen printer once it is PAID.** That is why
@@ -144,9 +144,39 @@ coupon order: void/cancel from Order Manager (no money moved).
 - [ ] Decide the seven asks in `DEMO.md`; add "who watches Order Manager
   at Concessions 1–3" if they have no printer.
 
-## 6. Sandbox results (filled in when §1 is done)
+## 6. Sandbox results — Sep 18, ~02:00 PT, Square SANDBOX, port 3001
 
-_Pending: sandbox credentials not yet in `.env.sandbox` as of writing._
+Seeded: 2 sandbox locations (pickup + fan deck, both at 1925 Blanshard St),
+GST/PST/Liquor Tax, 5 items incl. Boozy Coffee and a 24oz draft. All orders
+below were created by the app through `/api/orders` and then read back
+from Square with RetrieveOrder / SearchOrders.
+
+| # | Case | App response | Square's view |
+|---|---|---|---|
+| A | Pickup, Coffee + 2 Chips, card (`cnon:card-nonce-ok`) | 200, paid $9.51, VISA ····5858, receipt URL | `PICKUP/PROPOSED`, recipient "TEST" + phone, `schedule_type ASAP`, tender `CARD 951 CAPTURED`, `net_amount_due 0` |
+| B | Pickup, declined card (`cnon:card-nonce-declined`) | 402 "Your card was declined." | order **CANCELED**, fulfillment CANCELED (after the fix: cancel fulfillment first, then order, with a re-read version) |
+| C | Fan Deck delivery, Boozy Coffee, coupon `ROYALS-TEST-0918` | 200, paidWith `promo`, $0.00, `requiresIdCheck true` | `DELIVERY/PROPOSED`, discount 900 (100% ORDER), total 0, `net_amount_due 0`, address 1925 Blanshard St, note `Seat: Sec 108 Row A Seat 1 \| ID CHECK REQUIRED AT HANDOFF` |
+| D | Fan Deck delivery, Boozy Coffee, card | 200, paid $9.00, receipt URL, `requiresIdCheck true` | `DELIVERY/PROPOSED`, tender `CARD 900 CAPTURED`, seat + ID note present |
+| E | 24oz draft + Boozy Coffee, card | 400 limit-1 message | nothing created |
+| F | Section 112 + card | 400 sections message | nothing created |
+| UI | Browser: Fan Deck → Coffee → seat 108/A/3 → name → phone → Square card field, test Visa 4111…, 12/30, CVV 111, ZIP 94103 → **Pay $3.66** | "Order received · Paid $3.49 · VISA ····1111", receipt link, order ref; no console errors | paid card order |
+
+Notes from the sandbox run:
+- The card field showed a US-style **ZIP** in the sandbox test account and
+  rejected `V8T4J2`; the SDK's error ("Postal code is not valid") surfaced
+  in the UI correctly. Production location is CA, so expect a postal-code
+  field that accepts letters. If a fan's card is rejected on postal code
+  tomorrow, that is the first thing to look at.
+- Seeded sandbox items did not get tax applied by Square (total = subtotal),
+  so the UI estimate ($3.66) and the charged amount ($3.49) differed. The
+  app charges Square's own total and shows that on the confirmation, which
+  is the correct behaviour. Eventium's real items carry real taxes.
+- `PayOrder` with empty `payment_ids` on the $0 coupon order succeeded
+  (`net_amount_due 0`, state `OPEN`, no tender). **Still to confirm by eye:**
+  open the sandbox Seller Dashboard (Developer console → "Open sandbox
+  dashboard" → Orders) and check that orders A, C, D and the UI order are
+  listed and the declined one is not. C is the one that matters — it is
+  exactly what tomorrow's first order will be.
 
 ## 7. Known limits going in
 
