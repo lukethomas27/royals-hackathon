@@ -146,10 +146,10 @@ export default function OrderPanel({ stand, heat, onClose }: OrderPanelProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
+    <div className="order-overlay fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50" />
       <div
-        className="relative w-full max-w-md rounded-t-2xl px-5 pt-4 pb-6 max-h-[85vh] overflow-y-auto"
+        className="order-sheet relative w-full max-w-md rounded-t-2xl px-5 pt-4 pb-6 max-h-[85vh] overflow-y-auto"
         style={{ backgroundColor: "var(--panel-bg)", borderTop: "1px solid var(--panel-border)" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -203,7 +203,13 @@ export default function OrderPanel({ stand, heat, onClose }: OrderPanelProps) {
                 {catItems.map((item) => {
                   const alcoholic = isAlcoholicItem(item, taxesById);
                   return (
-                    <div key={item.id} className="py-1.5 border-b" style={{ borderColor: "var(--border-subtle)" }}>
+                    <div key={item.id} className="menu-item" style={{ borderColor: "var(--border-subtle)" }}>
+                      {item.imageUrl && (
+                        // Square supplies the image host per item, so a fixed Next image domain is not available.
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img className="menu-item-image" src={item.imageUrl} alt={item.name} loading="lazy" />
+                      )}
+                      <div className="menu-item-content">
                       <div className="flex items-center gap-1.5 mb-1">
                         <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{item.name}</span>
                         {alcoholic && (
@@ -212,6 +218,7 @@ export default function OrderPanel({ stand, heat, onClose }: OrderPanelProps) {
                           </span>
                         )}
                       </div>
+                      {item.description && <p className="menu-item-description">{item.description}</p>}
                       <div className="space-y-1">
                         {item.variations.map((v) => (
                           <div key={v.id} className="flex items-center justify-between">
@@ -236,6 +243,7 @@ export default function OrderPanel({ stand, heat, onClose }: OrderPanelProps) {
                           </div>
                         ))}
                       </div>
+                      </div>
                     </div>
                   );
                 })}
@@ -245,7 +253,7 @@ export default function OrderPanel({ stand, heat, onClose }: OrderPanelProps) {
             {cartCount > 0 && (
               <button
                 onClick={() => setPhase("checkout")}
-                className="w-full mt-2 py-3 rounded-lg font-semibold"
+                className="cart-cta w-full mt-2 py-3 rounded-lg font-semibold"
                 style={{ backgroundColor: "var(--accent-gold)", color: "var(--text-inverted)" }}
               >
                 View cart ({cartCount}) · {money(totals.total)}

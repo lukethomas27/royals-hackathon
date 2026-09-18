@@ -168,9 +168,9 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col items-center px-4 py-6 max-w-md mx-auto">
+    <div className="fan-page flex flex-col items-center px-4 py-6 max-w-md mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between w-full mb-4">
+      <div className="fan-header flex items-start justify-between w-full mb-4">
         <div>
           <h1 className="text-2xl font-bold mb-0" style={{ color: "var(--accent-gold)" }}>
             ArenaPulse
@@ -188,7 +188,7 @@ export default function Home() {
       <CategoryFilter selected={selectedCategory} onChange={handleCategoryChange} />
 
       {/* View mode toggle */}
-      <div className="flex w-full rounded-lg overflow-hidden mb-4" style={{ border: "1px solid var(--border-default)" }}>
+      <div className="view-toggle flex w-full rounded-lg overflow-hidden mb-4" style={{ border: "1px solid var(--border-default)" }}>
         {(["map", "list"] as const).map((mode) => (
           <button
             key={mode}
@@ -216,7 +216,7 @@ export default function Home() {
             inSeatSection={inSeatSection}
           />
 
-          <div className="flex items-center gap-2 mt-4 mb-2">
+          <div className="heat-legend flex items-center gap-2 mt-4 mb-2">
             <span className="text-xs" style={{ color: "var(--legend-text)" }}>Quiet</span>
             <div
               className="h-3 rounded-full w-32"
@@ -259,7 +259,7 @@ export default function Home() {
         </div>
       )}
 
-      <div className="w-full space-y-3">
+      <div className="simulation-controls w-full space-y-3">
         <select
           value={selectedDate}
           onChange={(e) => {

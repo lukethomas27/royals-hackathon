@@ -64,7 +64,7 @@ export default function ConcessionList({
   });
 
   return (
-    <div className="w-full space-y-2">
+    <div className="concession-list w-full space-y-2">
       {sorted.map((s) => {
         const heat = (s.heatmapKey && heatState[s.heatmapKey]) || 0;
         const color = heatToColor(heat);

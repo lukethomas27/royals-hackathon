@@ -9,7 +9,7 @@ interface CategoryFilterProps {
 
 export default function CategoryFilter({ selected, onChange }: CategoryFilterProps) {
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1 mb-4">
+    <div className="category-filter flex gap-2 overflow-x-auto pb-1 mb-4">
       {CATEGORY_OPTIONS.map((opt) => {
         const isActive = selected === opt.value;
         return (

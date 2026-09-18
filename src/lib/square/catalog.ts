@@ -51,6 +51,7 @@ interface RawCatalogObject {
     name?: string;
     description?: string;
     description_plaintext?: string;
+    image_ids?: string[];
     is_archived?: boolean;
     /** Deprecated by Square, still populated on old items. Last-resort fallback only. */
     category_id?: string;
@@ -71,6 +72,7 @@ interface RawCatalogObject {
   };
   category_data?: { name?: string };
   tax_data?: { name?: string; percentage?: string; enabled?: boolean };
+  image_data?: { url?: string };
 }
 
 interface SearchCatalogItemsResponse {
@@ -142,16 +144,18 @@ async function fetchLiveCatalog(
       presentAtLocation(obj, locationId)
   );
 
-  // 2. Resolve the category + tax objects these items reference, by ID.
+  // 2. Resolve the category, tax, and Square-hosted image objects by ID.
   const refIds = new Set<string>();
   for (const obj of liveItems) {
     const cat = pickCategoryId(obj.item_data!);
     if (cat) refIds.add(cat);
     for (const t of obj.item_data!.tax_ids ?? []) refIds.add(t);
+    for (const imageId of obj.item_data!.image_ids ?? []) refIds.add(imageId);
   }
 
   const categories: Record<string, SquareCatalogCategory> = {};
   const taxesById: Record<string, SquareCatalogTax> = {};
+  const imagesById: Record<string, string> = {};
   if (refIds.size > 0) {
     const batch = await squareRequest<BatchRetrieveResponse>("/v2/catalog/batch-retrieve", {
       method: "POST",
@@ -168,6 +172,9 @@ async function fetchLiveCatalog(
           percentage: obj.tax_data.percentage ?? "0",
           enabled: obj.tax_data.enabled ?? true,
         };
+      }
+      if (obj.type === "IMAGE" && obj.image_data?.url) {
+        imagesById[obj.id] = obj.image_data.url;
       }
     }
   }
@@ -194,6 +201,7 @@ async function fetchLiveCatalog(
       id: obj.id,
       name: d.name ?? "Unnamed item",
       description: d.description_plaintext ?? d.description ?? null,
+      imageUrl: d.image_ids?.map((id) => imagesById[id]).find(Boolean) ?? null,
       categoryId,
       categoryName: categoryId ? categories[categoryId]?.name ?? null : null,
       taxIds: d.tax_ids ?? [],
