@@ -12,6 +12,13 @@ import { isSquareConfigured } from "@/lib/square/client";
 const PHONE_RE = /^\+?[0-9\s()-]{10,15}$/;
 const NAME_MAX = 40;
 
+/** North American numbers only (the app serves one arena in BC). */
+function toE164(digits: string): string | null {
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return null;
+}
+
 interface OrderRequestBody {
   locationId: string;
   customerPhone: string;
@@ -114,6 +121,13 @@ export async function POST(req: NextRequest) {
   const digits = body.customerPhone.replace(/\D/g, "");
   const recipientName =
     (body.recipientName ?? "").trim().slice(0, NAME_MAX) || `Fan ····${digits.slice(-4)}`;
+  // Square's fulfillment recipient phone should be E.164 so any notification
+  // Square (or a later SMS integration) sends can actually reach the fan.
+  // Fans type "250 555 1234"; Square must receive "+12505551234".
+  const e164Phone = toE164(digits);
+  if (!e164Phone) {
+    return NextResponse.json({ error: "A valid phone number is required." }, { status: 400 });
+  }
 
   const order = await createOrder({
     locationId: stand.locationId,
@@ -123,7 +137,7 @@ export async function POST(req: NextRequest) {
     })),
     fulfillmentType: stand.role === "in_seat" ? "DELIVERY" : "PICKUP",
     seat,
-    customerPhone: body.customerPhone,
+    customerPhone: e164Phone,
     recipientName,
     standAddress: stand.address,
     fullDiscountName: promoValid ? `Promo ${promoEntered}` : null,
