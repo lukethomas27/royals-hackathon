@@ -179,12 +179,35 @@ export default function Home() {
             Victoria Royals
           </p>
           <p className="text-sm" style={{ color: "var(--text-tertiary)" }}>
-            Find the shortest line, then order
+            Order food and drinks at the arena
           </p>
         </div>
         <ThemeToggle />
       </div>
 
+      <section className="order-entry w-full" aria-labelledby="order-entry-title">
+        <div className="order-entry-heading">
+          <div>
+            <p>FOOD & DRINKS</p>
+            <h2 id="order-entry-title">Order from a concession</h2>
+          </div>
+          <span>{stands.length} locations</span>
+        </div>
+        {stands.length > 0 ? (
+          <div className="order-entry-list">
+            {stands.map((stand) => (
+              <button key={stand.locationId} type="button" onClick={() => setSelectedStandId(stand.locationId)} className="order-entry-card">
+                <span className="order-entry-card-copy"><strong>{stand.displayName}</strong><small>{stand.role === "in_seat" ? "Delivery to seat" : "Pickup"} · {stand.isOpen ? "Open for orders" : "Currently closed"}</small></span>
+                <span className="order-entry-card-action">{stand.isOpen ? "Order" : "View menu"} <span aria-hidden="true">→</span></span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="order-entry-empty">Concessions are unavailable in this preview. The arena map and ordering options will appear when the Square connection is configured.</p>
+        )}
+      </section>
+
+      <div className="map-section-heading w-full"><div><p>ARENA GUIDE</p><h2>Find your stand</h2></div><span>Tap a stand to view its menu</span></div>
       <CategoryFilter selected={selectedCategory} onChange={handleCategoryChange} />
 
       {/* View mode toggle */}
