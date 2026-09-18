@@ -15,7 +15,7 @@ Tick the boxes as you go. Every command runs from the repo folder.
 | Live Square reads (laptop) | 4 stands resolve; menus 17/17/15/15 items; categories ordered Food → … → NA Bev; Liquor Tax 10% found; 24oz variants only at the Fan Deck. |
 | Server gates (laptop, live data) | 24/24 pass: auth 401/200, closed-by-default 409, 3 alcoholic → 400, 24oz+1 → 400, unknown variation 409, bad phone 400, empty cart 400, unknown stand 400, no seat 400, section 112 400, blank row 400, cross-stand item 409, past cutoff 409, future cutoff opens, no card 400, bad promo 400, qty 0 400. All stop before Square. |
 | Checkout UI (laptop, production SDK) | Card field renders; coupon applies → $0.00, card hidden; Place order not pressed. |
-| Production URL | **No Square token, no Redis** → empty stand list, mock menu. Passcode set. `/api/health` = `blocked`. |
+| Production URL | **LIVE as of ~02:40 PT**: `/api/health` = `ok` (square, redis, payments, passcode, coupon all true); four live stands, all CLOSED; staff 401/200; closed-stand gate 409 verified from outside. Deployment `2hlnk3j3d` of commit `ed1058c`. |
 | Square order creation | Payload matches Square's fulfillment rules; **proven in the sandbox** (§6): pickup + delivery orders created, paid by card and by coupon, declined card cancels the order. Never run against production yet. |
 | Payment | Card via Web Payments SDK + CreatePayment, and a 100% coupon (`ROYALS-TEST-0918`) that marks a $0 order paid. Both new tonight, both verified in the sandbox incl. the real browser card field. |
 
@@ -27,15 +27,15 @@ tomorrow's order must be paid (card or coupon), not just created.
 
 Two things only you can do, then the rest is mine to run and verify.
 
-- [ ] **Vercel login** (so I can drive the CLI):
+- [x] **Vercel login** (done ~01:40, CLI logged in as lukethomas27):
   ```bash
   npx vercel login
   ```
-- [ ] **Sandbox credentials** into `.env.sandbox` (gitignored): Developer
+- [x] **Sandbox credentials** into `.env.sandbox` (done) (gitignored): Developer
   console → app "Victoria Royals" → toggle **Sandbox** → Credentials →
   paste the sandbox *Access token* and sandbox *Application ID*
   (`sandbox-sq0idb-…`). I never echo these.
-- [ ] I then run, and record results in §6:
+- [x] I then run, and record results in §6 (done, see §6):
   ```bash
   npm run sandbox:seed
   ```
@@ -45,7 +45,7 @@ Two things only you can do, then the rest is mine to run and verify.
   Card order (test Visa 4111…), declined card (4000 0000 0000 0002),
   coupon order, delivery order with seat, 24oz + 1 rejected. Each paid
   order must show `state: COMPLETED`/paid in the sandbox dashboard.
-- [ ] **Vercel wiring** (me, after login; you paste the one secret):
+- [x] **Vercel wiring** — all done: 13 vars + passcode + `SQUARE_ACCESS_TOKEN` + `ORDER_PROMO_CODE`, Upstash Redis provisioned via Marketplace and connected (injects `KV_REST_API_URL`/`KV_REST_API_TOKEN`), redeployed, verified:
   1. `vercel env ls` — confirm the 13 non-secret vars + `STAFF_PASSCODE`.
   2. Storage → **Upstash Redis** (Marketplace, free) → connect to
      `royals-hackathon`, all environments. I confirm before accepting terms.

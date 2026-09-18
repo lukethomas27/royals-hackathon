@@ -21,8 +21,8 @@ the URL on a QR code until it does.
 |---|---|---|
 | 13 non-secret Square vars (env, app ID, 4 location IDs, in-seat config, heat-map keys) | ✅ set, Production + Preview | done |
 | `STAFF_PASSCODE` | ✅ set, **Production only** | Luke has the value. Add it to Preview too if you want `/staff` to work on PR previews |
-| `SQUARE_ACCESS_TOKEN` | ❌ **not set** | Square Developer console → app "Victoria Royals" → Credentials → Production access token → paste into Vercel as **Sensitive**. Until then production serves **mock** stands |
-| Upstash Redis store | ❌ **not provisioned** | Vercel → project → Storage → Upstash Redis (Marketplace) → connect. Injects `KV_REST_API_URL`/`TOKEN`. **Until then every `/api/stands` call in production returns 500** — deliberate, see Sep 8 notes below |
+| `SQUARE_ACCESS_TOKEN` | ✅ set, Production, Sensitive (Sep 18) | Luke pasted it |
+| Upstash Redis store | ✅ provisioned + connected (Sep 18, Marketplace free plan) | Injects `KV_REST_API_URL`/`KV_REST_API_TOKEN`; `/api/health` reports `redis:true` |
 | Production domain | ❌ none | Decide before printing QR codes |
 
 So the first two things to do are: paste the Square token, provision the
