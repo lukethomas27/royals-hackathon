@@ -24,13 +24,15 @@ export default function StaffPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function load(pc: string) {
+  async function load(pc: string, opts: { silent?: boolean } = {}) {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/staff/status", { headers: { "x-staff-passcode": pc } });
       if (!res.ok) {
-        setError("Wrong passcode.");
+        // The mount-time probe (see useEffect below) is expected to 401 when a
+        // passcode is configured — don't greet staff with "Wrong passcode."
+        if (!opts.silent) setError("Wrong passcode.");
         setAuthed(false);
         return;
       }
@@ -65,7 +67,7 @@ export default function StaffPage() {
     // this still tries an initial load so the page isn't stuck on a login
     // screen in dev. See STATUS.md: an unset STAFF_PASSCODE is a dev
     // convenience only and must be set before launch.
-    load("");
+    load("", { silent: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

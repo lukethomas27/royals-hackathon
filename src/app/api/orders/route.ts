@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStandByLocationId } from "@/lib/square/locations";
 import { getMenu } from "@/lib/square/catalog";
-import { createOrder } from "@/lib/square/orders";
+import { createOrder, cancelOrder } from "@/lib/square/orders";
+import { chargeOrder, markZeroOrderPaid, PaymentDeclinedError } from "@/lib/square/payments";
+import { isPromoCodeValid, normalizePromoCode } from "@/lib/square/promo";
 import { validateAlcoholLimits, CartLine } from "@/lib/square/tax";
 import { getSeatPickerConfig, validateSeatSelection } from "@/lib/square/stations";
 import { getStandOrderingState, isOrderingOpen } from "@/lib/staffState";
+import { isSquareConfigured } from "@/lib/square/client";
 
 const PHONE_RE = /^\+?[0-9\s()-]{10,15}$/;
+const NAME_MAX = 40;
 
 interface OrderRequestBody {
   locationId: string;
@@ -14,6 +18,11 @@ interface OrderRequestBody {
   smsOptIn: boolean;
   lines: { itemId: string; variationId: string; quantity: number }[];
   seat?: { section: string; row: string; seat: string } | null;
+  /** Optional pickup name. Falls back to "Fan ····1234". */
+  recipientName?: string | null;
+  /** Web Payments SDK card token. Required unless a valid promo code zeroes the order. */
+  sourceId?: string | null;
+  promoCode?: string | null;
 }
 
 export async function POST(req: NextRequest) {
@@ -24,6 +33,11 @@ export async function POST(req: NextRequest) {
   }
   if (!body.lines?.length) {
     return NextResponse.json({ error: "Cart is empty." }, { status: 400 });
+  }
+  for (const line of body.lines) {
+    if (!Number.isInteger(line.quantity) || line.quantity < 1 || line.quantity > 20) {
+      return NextResponse.json({ error: "Invalid quantity." }, { status: 400 });
+    }
   }
 
   const stand = await getStandByLocationId(body.locationId);
@@ -39,6 +53,17 @@ export async function POST(req: NextRequest) {
       { error: "This stand is not currently accepting online orders." },
       { status: 409 }
     );
+  }
+
+  // Promo: the only way to place an order without a card token.
+  const promoEntered = normalizePromoCode(body.promoCode);
+  const promoValid = promoEntered.length > 0 && isPromoCodeValid(promoEntered);
+  if (promoEntered && !promoValid) {
+    return NextResponse.json({ error: "That code is not valid." }, { status: 400 });
+  }
+  const live = isSquareConfigured();
+  if (live && !promoValid && !body.sourceId) {
+    return NextResponse.json({ error: "Card details are required." }, { status: 400 });
   }
 
   // Re-derive cart lines from the live menu — never trust client-submitted
@@ -86,7 +111,11 @@ export async function POST(req: NextRequest) {
     seat = body.seat;
   }
 
-  const result = await createOrder({
+  const digits = body.customerPhone.replace(/\D/g, "");
+  const recipientName =
+    (body.recipientName ?? "").trim().slice(0, NAME_MAX) || `Fan ····${digits.slice(-4)}`;
+
+  const order = await createOrder({
     locationId: stand.locationId,
     lineItems: cartLines.map((l) => ({
       catalogObjectId: l.variation.id,
@@ -95,11 +124,51 @@ export async function POST(req: NextRequest) {
     fulfillmentType: stand.role === "in_seat" ? "DELIVERY" : "PICKUP",
     seat,
     customerPhone: body.customerPhone,
+    recipientName,
+    standAddress: stand.address,
+    fullDiscountName: promoValid ? `Promo ${promoEntered}` : null,
     requiresIdCheckNote: alcoholCheck.requiresIdCheck ? "ID CHECK REQUIRED AT HANDOFF" : undefined,
   });
 
+  // Pay it. Square only shows an order to staff once it is paid.
+  let payment: Awaited<ReturnType<typeof chargeOrder>> | null = null;
+  let paidWith: "card" | "promo" | "mock" = live ? "card" : "mock";
+  try {
+    if (order.totalMoney.amount === 0) {
+      // 100% promo (or a genuinely free order): no card, PayOrder with no payments.
+      await markZeroOrderPaid(order.orderId, order.version);
+      if (promoValid) paidWith = "promo";
+    } else {
+      if (!body.sourceId) {
+        // Promo was valid but did not zero the order — refuse rather than charge.
+        await cancelOrder(order);
+        return NextResponse.json({ error: "Card details are required." }, { status: 400 });
+      }
+      payment = await chargeOrder({
+        sourceId: body.sourceId,
+        orderId: order.orderId,
+        locationId: order.locationId,
+        amount: order.totalMoney,
+        note: `${stand.displayName} · ${recipientName}`,
+      });
+    }
+  } catch (err) {
+    await cancelOrder(order);
+    if (err instanceof PaymentDeclinedError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: 402 });
+    }
+    console.error("[api/orders] payment step failed", err);
+    return NextResponse.json({ error: "The payment did not go through. Try again." }, { status: 502 });
+  }
+
   return NextResponse.json({
-    orderId: result.orderId,
+    orderId: order.orderId,
+    paymentId: payment?.paymentId ?? null,
+    paidWith,
+    amount: payment?.amount ?? order.totalMoney,
+    receiptUrl: payment?.receiptUrl ?? null,
+    cardBrand: payment?.cardBrand ?? null,
+    cardLast4: payment?.cardLast4 ?? null,
     requiresIdCheck: alcoholCheck.requiresIdCheck,
     smsOptIn: body.smsOptIn,
   });

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import ArenaMap, { MapStand } from "@/components/ArenaMap";
 import ConcessionList from "@/components/ConcessionList";
 import CategoryFilter from "@/components/CategoryFilter";
-import OrderPanel from "@/components/OrderPanel";
+import OrderPanel, { SquareClientConfig } from "@/components/OrderPanel";
 import BestTimeCard from "@/components/DemandTimeline";
 import ThemeToggle from "@/components/ThemeToggle";
 import {
@@ -19,6 +19,7 @@ import { findBestTimes } from "@/lib/demandTimeline";
 export default function Home() {
   const [stands, setStands] = useState<MapStand[]>([]);
   const [inSeatSection, setInSeatSection] = useState("108");
+  const [squareConfig, setSquareConfig] = useState<SquareClientConfig | null>(null);
   const [gameIndex, setGameIndex] = useState<GameIndex | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [heatState, setHeatState] = useState<HeatState>({});
@@ -85,9 +86,10 @@ export default function Home() {
   useEffect(() => {
     fetch("/api/stands")
       .then((r) => r.json())
-      .then((data: { stands: MapStand[]; inSeatPhysicalSection: string }) => {
+      .then((data: { stands: MapStand[]; inSeatPhysicalSection: string; square?: SquareClientConfig }) => {
         setStands(data.stands);
         setInSeatSection(data.inSeatPhysicalSection);
+        setSquareConfig(data.square ?? null);
       });
 
     fetch("/data/games/index.json")
@@ -323,6 +325,7 @@ export default function Home() {
         <OrderPanel
           stand={selectedStand}
           heat={selectedStandHeat}
+          square={squareConfig}
           onClose={() => setSelectedStandId(null)}
         />
       )}

@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "process-data": "npx tsx scripts/process-data.ts"
+    "process-data": "npx tsx scripts/process-data.ts",
+    "dev:sandbox": "node scripts/dev-sandbox.mjs",
+    "sandbox:seed": "npx tsx scripts/sandbox-seed.ts"
   },
   "dependencies": {
     "@upstash/redis": "^1.38.4",

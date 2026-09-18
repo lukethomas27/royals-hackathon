@@ -7,6 +7,7 @@ control). **Read STATUS.md before touching this** — it tracks what's real,
 what's stubbed, and what still needs live Square account access to verify.
 `HANDOFF.md` covers moving hosting/repo/secrets off Luke's personal accounts.
 `DEMO.md` is the run sheet + open decisions for demoing to the SOFMC team.
+`PREFLIGHT.md` is the checklist for the first real (paid) test order, Sep 18 2026.
 
 ## Commands
 
@@ -15,6 +16,8 @@ npm run dev            # Dev server on localhost:3000 (runs on mock Square data 
 npm run build          # Production build
 npm run lint           # ESLint
 npm run process-data   # CSV → JSON pipeline (needs /External folder with CSVs)
+npm run sandbox:seed   # Seed Square SANDBOX locations/taxes/items from .env.sandbox (once)
+npm run dev:sandbox    # Second dev server on :3001 against the sandbox (stop :3000 first)
 ```
 
 ## Architecture
@@ -26,7 +29,9 @@ src/app/page.tsx                  # Fan-facing home: heat map/list, category fil
 src/app/staff/page.tsx            # Staff control surface — passcode-gated open/close + cutoff (section 6a)
 src/app/api/stands/route.ts       # GET — live stand list (Square locations + ordering state)
 src/app/api/menu/route.ts         # GET ?locationId= — live orderable menu for one stand
-src/app/api/orders/route.ts       # POST — validates + creates a Square order
+src/app/api/orders/route.ts       # POST — validates, creates the Square order, then pays it (card or promo)
+src/app/api/promo/route.ts        # GET ?code= — is the 100%-off test coupon valid (ORDER_PROMO_CODE)
+src/app/api/health/route.ts       # GET — non-secret readiness flags (square/redis/payments/promo)
 src/app/api/seat-config/route.ts  # GET — seat picker config (live Ordering Stations or fallback)
 src/app/api/staff/status/route.ts # GET/POST — staff open/close + cutoff, passcode-gated
 src/lib/square/                   # All Square API integration — see STATUS.md for real-vs-stub detail
@@ -36,7 +41,9 @@ src/lib/square/                   # All Square API integration — see STATUS.md
   locations.ts   # Live stand list, resolved to live display names
   catalog.ts     # Live menu read (Catalog API) — no hardcoded menus/prices anywhere
   tax.ts         # Tax breakdown + alcohol gating (Liquor Tax, not "Contains Alcohol")
-  orders.ts      # Square order creation against the correct location ID
+  orders.ts      # Square order creation (fulfillment recipient/prep/address per Square docs) + cancel
+  payments.ts    # CreatePayment for the order total; PayOrder for $0 (promo) orders
+  promo.ts       # ORDER_PROMO_CODE validation — test-only 100% coupon
   stations.ts    # Seat/row picker — live-read shape, unconfirmed API, see STATUS.md
   mock.ts        # Dev-only fallback data, used when SQUARE_ACCESS_TOKEN is unset
 src/lib/staffState.ts             # Staff open/close + cutoff persistence (dev-only, see STATUS.md)
@@ -58,7 +65,7 @@ public/data/games/               # 68 game JSON files + index.json
 
 **Heat map (carried forward from the prototype):** CSV files → `process-data.ts` → JSON in `public/data/games/` → fetched by page → `SimulationEngine` replays transactions → `ArenaMap` renders heat colors. Keyed to a launch stand via `Stand.heatmapKey` (see `getHeatmapKeyForSlot` in `square/config.ts`) — this is the *only* place the old CSV location-name strings are still used, and only to link historical data, never for display or ordering.
 
-**Menu/ordering (new):** fan picks a stand → `/api/menu?locationId=` reads live from Square → cart → `/api/orders` re-validates everything server-side (price, availability, alcohol limits, ordering-open state) → creates a Square order against that stand's location ID.
+**Menu/ordering:** fan picks a stand → `/api/menu?locationId=` reads live from Square → cart → checkout tokenizes the card with Square's Web Payments SDK (or applies the promo code) → `/api/orders` re-validates everything server-side (price, availability, alcohol limits, ordering-open state, seat) → creates a Square order against that stand's location ID → pays it (CreatePayment, or PayOrder with no payments when the total is $0). Square only shows an order to staff once it is paid.
 
 ## Key Patterns
 

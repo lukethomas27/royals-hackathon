@@ -1,4 +1,4 @@
-# Build status — Sep 8, 2026
+# Build status — Sep 18, 2026
 
 Written against `royals-app-build-context-v3.md` (the ArenaPulse project doc).
 This file tracks what's implemented, what's stubbed, and what still needs
@@ -54,6 +54,104 @@ Then run the 6-step smoke test in `HANDOFF.md` §6.
   submit the checkout form.
 - `npm run build` on Luke's machine needed `turbopack.root` pinned because
   of a stray lockfile in his OneDrive folder. Harmless elsewhere.
+
+---
+
+## Update — Sep 18, 2026 (overnight): payment capture built, first real order is TODAY
+
+Read `PREFLIGHT.md` — it is the checklist for the test order at SOFMC on
+Sep 18. Summary of what changed tonight:
+
+- **Two facts from Square's docs changed the plan.** (1) A PICKUP
+  fulfillment needs a recipient display name + pickup time / prep time,
+  and DELIVERY needs recipient name, phone and address — the old payload
+  sent none of these, so the first live `CreateOrder` would have been
+  rejected. (2) **Square only shows an API order on the register / Order
+  Manager / printer once it is PAID.** An unpaid order is invisible to
+  staff. So a "create the order and watch the ticket print" test needs
+  payment.
+- **Payment capture is in** (`src/lib/square/payments.ts`,
+  `OrderPanel.tsx`): Square Web Payments SDK card field in checkout →
+  one-time token → `/api/orders` creates the order, then `CreatePayment`
+  for the order's own `total_money` with `order_id` + `location_id`.
+  Declines cancel the order and return 402 with a fan-readable message.
+  Confirmation shows amount, card last 4 and Square's receipt link.
+- **Coupon** (`src/lib/square/promo.ts`): `ORDER_PROMO_CODE` env var. A
+  matching code adds a 100% ORDER discount; the $0 order is marked paid
+  with `PayOrder` + empty `payment_ids` (documented Square behaviour). No
+  card, no money, but the order prints like a paid one. **Delete the env
+  var after the test.** `/api/promo?code=` lets the UI hide the card form.
+- **Fulfillment payload fixed** (`orders.ts`): recipient name (optional
+  new "Name for pickup" field, else `Fan ····1234`) + phone, `ASAP` with
+  `PT10M`/`PT15M` prep, delivery address = the stand's own Square location
+  address (the Fan Deck record carries "Fan Deck Bar, 1925 Blanshard St"),
+  seat in the delivery note. Order version + fulfillment uid captured so a
+  failed payment can cancel cleanly.
+- `/api/stands` now returns `square: {configured, applicationId,
+  environment}` so the browser knows which SDK to load. `/api/health`
+  gained `environment`, `payments`, `promoCodeActive`.
+- **Sandbox harness**: `.env.sandbox` (gitignored) + `npm run
+  sandbox:seed` (creates 2 sandbox locations, BC taxes, 5 items incl. a
+  24oz beer) + `npm run dev:sandbox` (port 3001, sandbox creds override
+  `.env.local`). Results go in `PREFLIGHT.md` §6.
+- **Repo reconciled**: Aashna's Sep 9 commits (health route, live
+  Ordering Stations read behind `SQUARE_ORDERING_STATIONS_URL`, `NA Bev
+  PST Exempt` → `NA Bev` label) were on `origin/main` but not on this
+  laptop; merged with the uncommitted Sep 14 fixes (one conflict in
+  `ArenaMap.tsx`, kept the 2dp rounding). A stray `.claude/worktrees`
+  gitlink she committed was removed.
+- Re-verified tonight against live Square from this laptop: all 24
+  server-side gates (see `PREFLIGHT.md` §0), menus 17/17/15/15, card
+  field renders with the production SDK, coupon zeroes the cart in the
+  UI. **No order was created.** All four stands left CLOSED.
+
+Still open after tonight: Vercel token + Redis (in progress, `PREFLIGHT.md`
+§1), SMS, seat picker, Hobby-plan → paid team.
+
+---
+
+## Update — Sep 14, 2026: pre-demo rehearsal (day before the arena visit)
+
+Full dress rehearsal of the `DEMO.md` run sheet against live Square from
+this laptop. No Square order was created. Findings and fixes:
+
+- **Stale Turbopack cache broke the fan page.** `npm run dev` came up
+  with a red "Could not find the module src/app/page.tsx#default in the
+  React Client Manifest" overlay and a 500 on `/`. Cause: the on-disk
+  `.next` cache on this OneDrive path. Fix: `rm -rf .next` then restart.
+  **Do this before the demo** — it's in the day-before checklist in `DEMO.md`.
+- **Hydration warning fixed.** `ArenaMap.tsx` now rounds every computed
+  SVG coordinate to 2dp (`r2()`), so the dev overlay no longer shows a
+  "1 issue" badge on the fan page. Item 4 of the Sep 8 "Still open" list.
+- **`/staff` greeted with "Wrong passcode." before anyone typed.** The
+  mount-time probe (`load("")`) 401s by design when a passcode is set and
+  was surfacing the error. Now silent; the message only appears after a
+  real attempt.
+- **Menu category order.** Square returned "NA Bev PST Exempt" first, so a
+  stand's menu opened on 0% beers and hot drinks. `OrderPanel.tsx` now
+  orders known reporting categories Food → Snacks → Sweets → Beer → Wine,
+  Cider & Coolers → Liquor → NA Bev → NA Bev PST Exempt; unknown names keep
+  Square's order after those. Still no hardcoded menu — names are matched
+  loosely and anything unmatched still renders.
+- **Blank variation label.** "Chicken Tenders" has one variation with an
+  empty name in Square, which rendered as a nameless price row. Falls back
+  to the item name now.
+- **Checkout note reworded** from "see STATUS.md" to fan-readable copy:
+  "Payment isn't connected yet. Placing this order would send it to the
+  stand as an unpaid Square order."
+
+Verified this session, all against live data: 4 stands resolve with live
+names; menus 17/17/15/15 items; staff GET 401 without passcode, 200 with;
+closed stand → 409; 3× alcoholic → 400 (limit 2); 24oz + one → 400 (limit
+1); unknown variation → 409; bad phone → 400; Fan Deck no seat → 400;
+section 112 → 400; cutoff in the past → 409. Browser at 375px: menu
+browse, cart, client-side limit message, closed-stand banner with dimmed
+Add buttons. `npm run build` and `tsc --noEmit` pass. All four stands were
+reset to CLOSED at the end. Nothing in Square was touched.
+
+Noticed, not changed: "COMBO Fries $6.51" and "COMBO Chips $3.01" are
+visible online at Concession 1 — they look like combo add-on lines that
+Eventium probably doesn't want orderable on their own. Worth asking.
 
 ---
 
@@ -287,9 +385,8 @@ the root fixes it; Vercel never hit this. Build now passes: 10 routes, all
    live section list; optionally find the storefront's per-seat lookup.
 3. ~~`@vercel/kv` is deprecated~~ — swapped to `@upstash/redis` on Sep 8
    (see above); the store itself still needs provisioning in Vercel.
-4. Pre-existing dev-only React hydration warning on `/` — floating-point
-   SVG coordinates in `ArenaMap` differ in the last digit between server
-   and client. Cosmetic; round the coordinates to fix.
+4. ~~Pre-existing dev-only React hydration warning on `/`~~ — fixed Sep 14
+   by rounding the computed SVG coordinates in `ArenaMap`.
 5. `.claude/launch.json` added so the in-app preview can start `npm run dev`.
 
 ---

@@ -4,7 +4,7 @@
 
 import { isSquareConfigured, squareRequest } from "./client";
 import { getConfiguredStandSlots, getHeatmapKeyForSlot, SLOT_LAYOUT, StandSlotConfig } from "./config";
-import { SquareLocation } from "./types";
+import { SquareAddress, SquareLocation } from "./types";
 import { MOCK_LOCATIONS } from "./mock";
 
 export interface Stand {
@@ -15,6 +15,9 @@ export interface Stand {
   x: number;
   y: number;
   heatmapKey: string | null; // links to the frozen historical CSV dataset, if configured
+  /** The stand's own street address from Square — used as the DELIVERY
+   * recipient address Square requires (the seat goes in the note). */
+  address: SquareAddress | null;
 }
 
 interface ListLocationsResponse {
@@ -22,7 +25,7 @@ interface ListLocationsResponse {
     id: string;
     name: string;
     status: string;
-    address?: { address_line_1?: string; locality?: string };
+    address?: SquareAddress;
   }>;
 }
 
@@ -77,6 +80,7 @@ export async function getStands(): Promise<Stand[]> {
         x: layout.x,
         y: layout.y,
         heatmapKey: getHeatmapKeyForSlot(s.slot, useMock),
+        address: loc.address ?? null,
       };
     })
     .filter((s): s is Stand => s !== null);

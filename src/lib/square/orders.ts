@@ -5,31 +5,71 @@
 // submitted (Square's Orders API returns the authoritative total, tax,
 // tips and fees) — tax.ts's estimateLineTax is cart-preview only.
 //
-// Payment capture (Square Web Payments SDK, card entry, nonce -> Payments
-// API) is NOT implemented here — that needs a live sandbox application ID
-// and a browser-side SDK script, which needs real credentials to test
-// against. See STATUS.md. This module covers order creation only.
+// Fulfillment shape (checked 2026-09-18 against Square's "Manage Order
+// Fulfillments" guide): PICKUP needs a recipient display name and either a
+// pickup time or, with schedule_type ASAP, a prep_time_duration. DELIVERY
+// additionally needs recipient phone + address. Square only surfaces an
+// order on the register / Order Manager / kitchen printer once it is PAID —
+// see payments.ts for the two ways this app pays an order.
 
 import { isSquareConfigured, squareRequest } from "./client";
 import { SquareCreateOrderRequest, SquareCreateOrderResult } from "./types";
 
-function idempotencyKey(): string {
-  return `order-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+export function idempotencyKey(prefix = "order"): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-interface CreateOrderResponse {
+interface OrderResponse {
   order?: {
     id: string;
     location_id: string;
+    version?: number;
+    state?: string;
     total_money?: { amount: number; currency: string };
+    fulfillments?: { uid?: string; state?: string }[];
   };
-  errors?: { detail?: string }[];
+  errors?: { code?: string; detail?: string }[];
 }
+
+const PICKUP_PREP = "PT10M";
+const DELIVERY_PREP = "PT15M";
 
 async function createLiveOrder(
   req: SquareCreateOrderRequest & { requiresIdCheckNote?: string }
 ): Promise<SquareCreateOrderResult> {
   const noteParts = [req.note, req.requiresIdCheckNote].filter(Boolean);
+  const recipient = {
+    display_name: req.recipientName,
+    phone_number: req.customerPhone,
+  };
+
+  const fulfillment =
+    req.fulfillmentType === "PICKUP"
+      ? {
+          type: "PICKUP",
+          state: "PROPOSED",
+          pickup_details: {
+            recipient,
+            schedule_type: "ASAP",
+            prep_time_duration: PICKUP_PREP,
+            ...(noteParts.length ? { note: noteParts.join(" | ") } : {}),
+          },
+        }
+      : {
+          type: "DELIVERY",
+          state: "PROPOSED",
+          delivery_details: {
+            recipient: { ...recipient, ...(req.standAddress ? { address: req.standAddress } : {}) },
+            schedule_type: "ASAP",
+            prep_time_duration: DELIVERY_PREP,
+            note: [
+              req.seat ? `Seat: Sec ${req.seat.section} Row ${req.seat.row} Seat ${req.seat.seat}` : null,
+              ...noteParts,
+            ]
+              .filter(Boolean)
+              .join(" | "),
+          },
+        };
 
   const body = {
     idempotency_key: idempotencyKey(),
@@ -40,29 +80,19 @@ async function createLiveOrder(
         quantity: li.quantity,
         note: li.note,
       })),
-      fulfillments: [
-        {
-          type: req.fulfillmentType,
-          state: "PROPOSED",
-          ...(req.fulfillmentType === "PICKUP"
-            ? { pickup_details: { note: noteParts.join(" | ") } }
-            : {
-                delivery_details: {
-                  note: [
-                    noteParts.join(" | "),
-                    req.seat ? `Seat: Sec ${req.seat.section} Row ${req.seat.row} Seat ${req.seat.seat}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" | "),
-                },
-              }),
-        },
-      ],
+      ...(req.fullDiscountName
+        ? {
+            discounts: [
+              { uid: "promo", name: req.fullDiscountName, percentage: "100", scope: "ORDER" },
+            ],
+          }
+        : {}),
+      fulfillments: [fulfillment],
       metadata: { customer_phone: req.customerPhone },
     },
   };
 
-  const data = await squareRequest<CreateOrderResponse>("/v2/orders", {
+  const data = await squareRequest<OrderResponse>("/v2/orders", {
     method: "POST",
     body: JSON.stringify(body),
   });
@@ -75,6 +105,8 @@ async function createLiveOrder(
     orderId: data.order.id,
     locationId: data.order.location_id,
     totalMoney: data.order.total_money ?? { amount: 0, currency: "CAD" },
+    version: data.order.version ?? 1,
+    fulfillmentUid: data.order.fulfillments?.[0]?.uid ?? null,
   };
 }
 
@@ -83,7 +115,6 @@ export async function createOrder(
 ): Promise<SquareCreateOrderResult> {
   if (!isSquareConfigured()) {
     // Dev-mode stand-in so the checkout flow is demoable end to end.
-    // eslint-disable-next-line no-console
     console.warn(
       "[square/orders] SQUARE_ACCESS_TOKEN not set — returning a mock order, nothing was sent to Square."
     );
@@ -91,7 +122,38 @@ export async function createOrder(
       orderId: `MOCK-ORDER-${idempotencyKey()}`,
       locationId: req.locationId,
       totalMoney: { amount: 0, currency: "CAD" },
+      version: 1,
+      fulfillmentUid: null,
     };
   }
   return createLiveOrder(req);
+}
+
+/**
+ * Best-effort cancel of an order whose payment failed, so an unpaid order
+ * never lingers in Square. Never throws — the payment error is what the fan
+ * needs to see, and an OPEN unpaid order is invisible to staff anyway.
+ */
+export async function cancelOrder(order: SquareCreateOrderResult): Promise<boolean> {
+  if (!isSquareConfigured() || order.orderId.startsWith("MOCK-")) return true;
+  try {
+    await squareRequest<OrderResponse>(`/v2/orders/${order.orderId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey("cancel"),
+        order: {
+          location_id: order.locationId,
+          version: order.version,
+          state: "CANCELED",
+          ...(order.fulfillmentUid
+            ? { fulfillments: [{ uid: order.fulfillmentUid, state: "CANCELED" }] }
+            : {}),
+        },
+      }),
+    });
+    return true;
+  } catch (err) {
+    console.error("[square/orders] could not cancel order after failed payment", order.orderId, err);
+    return false;
+  }
 }

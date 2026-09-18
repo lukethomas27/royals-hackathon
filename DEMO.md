@@ -7,6 +7,11 @@ https://claude.ai/code/artifact/62e686c9-723e-4491-bfb0-19409f8ac6fb
 `STATUS.md` is the technical state. `HANDOFF.md` is the account transfer.
 This file is what you say in the room.
 
+> **Sep 18 update:** payment capture now exists and the first real order is
+> being placed today. `PREFLIGHT.md` is the run sheet for that; the "do not
+> press Place order" rule below only applies when demoing without a
+> test-order window agreed with SOFMC.
+
 ## Before the room
 
 The public Vercel deployment has **no Square token** and **no Redis store**
@@ -31,6 +36,43 @@ sold-out demo below is the one that lands hardest with operations people.
 **The one rule: do not press "Place order."** It would create a real,
 unpaid open order at a real stand. Every other gate can be demoed safely
 because it fails *before* anything reaches Square.
+
+### Day-before / morning-of checklist
+
+Rehearsed Sep 14 (see `STATUS.md`). The one thing that actually broke in
+rehearsal was a stale dev cache, so:
+
+1. **Clear the cache, then start.** On this OneDrive path Turbopack's
+   `.next` folder goes stale and the fan page comes up as a red "React
+   Client Manifest" error. Run, in this order:
+
+   ```bash
+   rm -rf .next
+   ```
+
+   ```bash
+   npm run dev
+   ```
+
+   Wait for "Ready", then load `localhost:3000` once and confirm the arena
+   map renders with no red overlay and no "issue" badge bottom-left.
+2. **Internet.** The laptop reads Square live on every menu open. Arena
+   Wi‑Fi is unknown — bring a phone hotspot and connect *before* walking in.
+   With no network the app shows an empty stand list and nothing to demo.
+3. **`.env.local` is intact.** `grep -c SQUARE_ACCESS_TOKEN .env.local`
+   should print 1. If the file is gone, the app silently runs on mock
+   stands named "Mock Pickup Stand A" — you'll see it immediately.
+4. **All four stands read CLOSED** at `localhost:3000/staff`. Rehearsal
+   left them closed; if any is open, tap Closed then "Clear override".
+5. **Phone-width tab ready.** Browser devtools → device toolbar → 375px,
+   or just narrow the window. Zoom the staff tab to 125% for the room.
+6. **Laptop basics.** Charger, screen sleep off, notifications off, browser
+   with only the two tabs open, and `npm run dev` left running in a
+   terminal you don't close by accident.
+7. **Have the fallback ready.** If the dev server dies mid-demo, the fix
+   is step 1 again (30 seconds). Say "let me restart that" and carry on.
+8. **Do not `git pull` or `npm install` the morning of.** Nothing upstream
+   needs it and a fresh install on OneDrive has stalled before.
 
 ## Run sheet (~15 min)
 

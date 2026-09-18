@@ -16,11 +16,13 @@ import { SquareCatalogItem, SquareCatalogTax, SquareLocation } from "./types";
 
 export const MOCK_LOCATION_IDS = ["LOC_MOCK_1", "LOC_MOCK_2", "LOC_MOCK_3", "LOC_MOCK_4"];
 
+const MOCK_ADDRESS = { address_line_1: "1925 Blanshard St", locality: "Victoria", administrative_district_level_1: "BC", postal_code: "V8T 4J2", country: "CA" };
+
 export const MOCK_LOCATIONS: SquareLocation[] = [
-  { id: "LOC_MOCK_1", name: "Mock Pickup Stand A", status: "ACTIVE" },
-  { id: "LOC_MOCK_2", name: "Mock Pickup Stand B", status: "ACTIVE" },
-  { id: "LOC_MOCK_3", name: "Mock Pickup Stand C", status: "ACTIVE" },
-  { id: "LOC_MOCK_4", name: "Mock In-Seat Stand", status: "ACTIVE" },
+  { id: "LOC_MOCK_1", name: "Mock Pickup Stand A", status: "ACTIVE", address: MOCK_ADDRESS },
+  { id: "LOC_MOCK_2", name: "Mock Pickup Stand B", status: "ACTIVE", address: MOCK_ADDRESS },
+  { id: "LOC_MOCK_3", name: "Mock Pickup Stand C", status: "ACTIVE", address: MOCK_ADDRESS },
+  { id: "LOC_MOCK_4", name: "Mock In-Seat Stand", status: "ACTIVE", address: MOCK_ADDRESS },
 ];
 
 export const MOCK_TAXES: Record<string, SquareCatalogTax> = {
@@ -34,7 +36,7 @@ function money(cents: number) {
 }
 
 /** Same mock menu served at every mock stand, for simplicity. */
-export function mockCatalogForLocation(_locationId: string): SquareCatalogItem[] {
+export function mockCatalogForLocation(): SquareCatalogItem[] {
   return [
     {
       id: "ITEM_HOTDOG",

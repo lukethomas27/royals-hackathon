@@ -226,7 +226,7 @@ export function fanCategoryName(categoryName: string | null): string | null {
 export async function getMenu(locationId: string): Promise<MenuResult> {
   if (!isSquareConfigured()) {
     return {
-      items: mockCatalogForLocation(locationId),
+      items: mockCatalogForLocation(),
       taxesById: MOCK_TAXES,
       source: "mock",
     };

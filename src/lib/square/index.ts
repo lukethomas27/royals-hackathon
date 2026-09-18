@@ -6,3 +6,5 @@ export * from "./catalog";
 export * from "./tax";
 export * from "./orders";
 export * from "./stations";
+export * from "./payments";
+export * from "./promo";
