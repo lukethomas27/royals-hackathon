@@ -97,7 +97,8 @@ enforced server-side; delivery restricted to 107–111; staff open/close with
 closed-by-default; orders created against the correct stand so revenue
 reports out of the right concession.
 
-**Not built:** payment capture (the blocker), the "text me when ready" SMS,
+**Not built:** payment capture (the blocker), live "text me when ready" SMS
+(built Sep 27, needs a Twilio account + Square webhook — `STATUS.md`),
 a proper seat picker (fans type row/seat today), and no real order has ever
 been placed.
 
@@ -112,9 +113,12 @@ been placed.
    Square. Fan Deck prints tickets immediately; do Concessions 1–3 have a
    printer/KDS, or does someone watch the register? Decides whether we need
    an alert screen. → Eventium
-3. **Who texts the fan?** We collect the number and opt-in but send nothing.
-   Square's own notifications (needs testing on API-created orders), our own
-   SMS service, or drop the promise and use order numbers on a board. → Eventium
+3. **Do stand staff tap Ready and Complete in Square?** Order texts are
+   built (received / ready / complete, via Twilio + a Square webhook — see
+   `STATUS.md` Sep 27), but "ready" and "complete" only go out when staff
+   mark the order in the register / Order Manager / KDS. If they only work
+   off the printed ticket, fans get "received" and nothing more. Also: OK to
+   buy a Twilio number under a Royals/Eventium account? → SOFMC + Eventium
 4. **Pick a test-order window.** Quiet non-game hour, someone at the Fan Deck
    register. One small order through the app, confirmed, then voided. → SOFMC
 5. **Which old stand is which?** Heat map only. We inferred Concession 1 =
@@ -136,7 +140,8 @@ been placed.
 3. First real order at the Fan Deck, then void it. Confirms the ticket
    prints, the seat shows, the ID-check note is visible. *(us + SOFMC, needs
    ask 4)*
-4. Wire the "order ready" notification. *(us, needs ask 3)*
+4. Turn on order texts: Twilio account + Square webhook subscription, sandbox
+   run-through (`STATUS.md` Sep 27). *(us, needs ask 3)*
 5. Proper seat picker from the live seat list. *(us, lower priority)*
 6. Move accounts to Royals ownership per `HANDOFF.md`. *(needs ask 7)*
 7. Domain on the project, QR codes printed. *(Royals, needs payment live)*

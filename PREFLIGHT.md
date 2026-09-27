@@ -182,8 +182,9 @@ Notes from the sandbox run:
 
 - Vercel Hobby plan forbids commercial use. A refunded test charge is a
   grey area; move to a paid team before any real sales (`HANDOFF.md`).
-- No SMS is sent even though the checkbox says so. Staff call the name /
-  deliver to the seat. Decide ask #3 before launch.
+- Order texts are built (Sep 27) but only send once Twilio and the Square
+  webhook are configured; until then the checkout hides the "text me" box.
+  Staff call the name / deliver to the seat. See `STATUS.md` Sep 27.
 - The coupon is a single shared code with no usage limit. It exists only
   for supervised tests.
 - 3-D Secure / SCA is left to Square's automatic handling in

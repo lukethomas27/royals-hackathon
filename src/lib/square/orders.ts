@@ -14,6 +14,7 @@
 
 import { isSquareConfigured, squareRequest, SquareApiError } from "./client";
 import { SquareCreateOrderRequest, SquareCreateOrderResult } from "./types";
+import { ORDER_METADATA } from "@/lib/notify/orderUpdates";
 
 export function idempotencyKey(prefix = "order"): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -88,7 +89,12 @@ async function createLiveOrder(
           }
         : {}),
       fulfillments: [fulfillment],
-      metadata: { customer_phone: req.customerPhone },
+      metadata: {
+        [ORDER_METADATA.customerPhone]: req.customerPhone,
+        [ORDER_METADATA.source]: "1",
+        ...(req.smsOptIn ? { [ORDER_METADATA.smsOptIn]: "1" } : {}),
+        ...(req.requiresIdCheckNote ? { [ORDER_METADATA.idCheck]: "1" } : {}),
+      },
     },
   };
 

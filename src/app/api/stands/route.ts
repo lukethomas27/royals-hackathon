@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getStands } from "@/lib/square/locations";
 import { getInSeatPhysicalSection } from "@/lib/square/config";
 import { isSquareConfigured } from "@/lib/square/client";
+import { isSmsConfigured } from "@/lib/notify/sms";
+import { isProductionRuntime } from "@/lib/redis";
 import { getStandOrderingState, isOrderingOpen } from "@/lib/staffState";
 
 export async function GET() {
@@ -21,6 +23,9 @@ export async function GET() {
       configured: isSquareConfigured(),
       applicationId: process.env.NEXT_PUBLIC_SQUARE_APPLICATION_ID ?? null,
       environment: process.env.SQUARE_ENVIRONMENT === "production" ? "production" : "sandbox",
+      // Only offer "text me" when a text can actually go out. Dev always
+      // shows it (texts are logged to the console instead).
+      smsEnabled: isSmsConfigured() || !isProductionRuntime(),
     },
   });
 }

@@ -18,6 +18,7 @@ npm run lint           # ESLint
 npm run process-data   # CSV → JSON pipeline (needs /External folder with CSVs)
 npm run sandbox:seed   # Seed Square SANDBOX locations/taxes/items from .env.sandbox (once)
 npm run dev:sandbox    # Second dev server on :3001 against the sandbox (stop :3000 first)
+npm run sandbox:advance -- <orderId> PREPARED|COMPLETED   # Mark a sandbox order ready/complete (fires the order-text webhook)
 ```
 
 ## Architecture
@@ -34,6 +35,7 @@ src/app/api/promo/route.ts        # GET ?code= — is the 100%-off test coupon v
 src/app/api/health/route.ts       # GET — non-secret readiness flags (square/redis/payments/promo)
 src/app/api/seat-config/route.ts  # GET — seat picker config (live Ordering Stations or fallback)
 src/app/api/staff/status/route.ts # GET/POST — staff open/close + cutoff, passcode-gated
+src/app/api/webhooks/square/route.ts # POST — Square order webhook → "ready"/"complete" texts (signature-checked)
 src/lib/square/                   # All Square API integration — see STATUS.md for real-vs-stub detail
   types.ts       # Narrow typed subset of the Square API this app touches
   client.ts      # Fetch wrapper (SQUARE_ACCESS_TOKEN / SQUARE_ENVIRONMENT)
@@ -45,7 +47,12 @@ src/lib/square/                   # All Square API integration — see STATUS.md
   payments.ts    # CreatePayment for the order total; PayOrder for $0 (promo) orders
   promo.ts       # ORDER_PROMO_CODE validation — test-only 100% coupon
   stations.ts    # Seat/row picker — live-read shape, unconfirmed API, see STATUS.md
+  webhooks.ts    # Webhook signature check (HMAC-SHA256 of URL + body)
   mock.ts        # Dev-only fallback data, used when SQUARE_ACCESS_TOKEN is unset
+src/lib/notify/                   # Fan order texts (received / ready / complete / cancelled)
+  sms.ts          # Twilio REST sender + E.164 normalization; logs instead of sending in dev
+  orderUpdates.ts # Message copy, Square order → stage mapping, Redis de-dupe per (order, stage)
+src/lib/redis.ts                  # Shared Upstash Redis client (staff state + SMS de-dupe)
 src/lib/staffState.ts             # Staff open/close + cutoff persistence (dev-only, see STATUS.md)
 src/components/ArenaMap.tsx       # SVG arena with heat-mapped stands, driven by live Stand[] data
 src/components/ConcessionList.tsx # List view of stands, same live data
@@ -66,6 +73,8 @@ public/data/games/               # 68 game JSON files + index.json
 **Heat map (carried forward from the prototype):** CSV files → `process-data.ts` → JSON in `public/data/games/` → fetched by page → `SimulationEngine` replays transactions → `ArenaMap` renders heat colors. Keyed to a launch stand via `Stand.heatmapKey` (see `getHeatmapKeyForSlot` in `square/config.ts`) — this is the *only* place the old CSV location-name strings are still used, and only to link historical data, never for display or ordering.
 
 **Menu/ordering:** fan picks a stand → `/api/menu?locationId=` reads live from Square → cart → checkout tokenizes the card with Square's Web Payments SDK (or applies the promo code) → `/api/orders` re-validates everything server-side (price, availability, alcohol limits, ordering-open state, seat) → creates a Square order against that stand's location ID → pays it (CreatePayment, or PayOrder with no payments when the total is $0). Square only shows an order to staff once it is paid.
+
+**Order texts:** Square cannot text customers of API-created orders, so the app sends its own via Twilio. `/api/orders` sends "order received" right after payment (via `after()`), and tags the Square order's `metadata` with `arenapulse=1` / `arenapulse_sms=1`. When staff tap Ready / Complete in Square, the fulfillment moves to `PREPARED` / `COMPLETED` → Square fires `order.fulfillment.updated` → `/api/webhooks/square` verifies the signature, drops non-launch locations and non-app orders, re-reads the order and texts the fan. Each (order, stage) is claimed in Redis first so Square's retries never double-text. **Texts only fire if staff actually tap Ready / Complete.**
 
 ## Key Patterns
 

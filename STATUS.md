@@ -1,4 +1,4 @@
-# Build status — Sep 18, 2026
+# Build status — Sep 27, 2026
 
 Written against `royals-app-build-context-v3.md` (the ArenaPulse project doc).
 This file tracks what's implemented, what's stubbed, and what still needs
@@ -54,6 +54,120 @@ Then run the 6-step smoke test in `HANDOFF.md` §6.
   submit the checkout form.
 - `npm run build` on Luke's machine needed `turbopack.root` pinned because
   of a stray lockfile in his OneDrive folder. Harmless elsewhere.
+
+---
+
+## Update — Sep 27, 2026: order texts (received / ready / complete)
+
+Fans who tick "text me" at checkout now get up to three texts: **order
+received** (right after payment), **ready** (pickup) / **on the way**
+(in-seat), and **picked up / delivered**. Also **cancelled**, if staff
+cancel a paid order. Code is in; **nothing has been sent to a real phone
+yet** — it needs a Twilio account and a Square webhook subscription (setup
+below).
+
+**Why not Square's own texts.** Square has no API for texting a customer.
+Its built-in "order received / order ready" texts belong to Square Online
+(the Fan Deck QR site has them: Order Received on, Order Ready off) and
+Square for Restaurants, and don't fire for orders created through the
+Orders API like ours — confirmed by other developers on Square's forum
+(putting the phone in `pickup_details.recipient` doesn't trigger them).
+What Square *does* give us is the state: when staff tap Ready / Complete on
+the register, Order Manager or KDS, the order's fulfillment moves
+`PROPOSED → (RESERVED) → PREPARED → COMPLETED` and Square fires an
+`order.fulfillment.updated` webhook. So Square supplies the events, we send
+the text.
+
+**Why SMS, not push notifications.** Web Push on iPhone only works for a
+site the fan has added to their home screen (iOS 16.4+). A fan who scans a
+QR code at their seat won't do that, and a permission prompt mid-checkout
+costs conversions. We already collect the phone number and the opt-in.
+
+**Why Twilio.** The standard choice, Canadian local and toll-free numbers,
+handles STOP / HELP replies itself. Called with plain `fetch`, no SDK. Telnyx,
+Vonage or AWS SNS would be a swap of `src/lib/notify/sms.ts` only.
+
+**How it works:**
+- `/api/orders` writes `arenapulse=1` (and `arenapulse_sms=1` when opted
+  in, `arenapulse_id_check=1` for alcohol) into the Square order's
+  `metadata`, so no database of ours is needed to remember who opted in.
+  After payment succeeds it sends "order received" via `after()` — after the
+  response, so a slow SMS provider never delays the confirmation screen.
+- `/api/webhooks/square` checks Square's HMAC signature (401 if wrong),
+  **drops events for any location that isn't one of the 4 launch stands**
+  (the webhook fires for all 60+ locations on Eventium's account), re-reads
+  the order, ignores anything without our metadata (Square Online QR
+  orders, which Square already texts about) or without the opt-in, maps the
+  current state to a text and sends it.
+- Each (order, stage) is claimed in Redis (`arenapulse:sms:*`, 7-day TTL)
+  before sending, so Square's retries and duplicates never double-text.
+  Because the handler acts on the order's *current* state, out-of-order
+  events are harmless. If Twilio has a 5xx / 429 the claim is released and
+  we return 503 so Square redelivers; a 4xx (bad number, fan replied STOP)
+  is final.
+- A CANCELED event with no "received" text on record is our own cleanup of
+  a declined card (`cancelOrder`) — ignored; the fan already saw the error.
+- The checkout only shows the "text me" box when Twilio is configured (dev
+  always shows it and logs texts to the console instead of sending).
+  `/api/health` gained `sms` and `orderWebhook` flags; neither is part of
+  `ready`, since ordering works without texts.
+
+**The one real dependency: staff have to tap Ready and Complete.** If a
+stand just works from the printed ticket and never touches the order in
+Square, the fan gets "received" and nothing else. If staff jump straight to
+Complete, the fan gets only "picked up". We need to know what the stands
+actually do. Ask SOFMC/Eventium (it's `DEMO.md` ask #3).
+
+**Setup, in order (Luke / whoever owns the accounts per `HANDOFF.md`):**
+1. **Twilio**, on a Royals or Eventium email, not a personal one. Upgrade
+   off trial (a trial account can only text numbers you've verified). Buy a
+   Canadian number (a 250 local number is simplest; toll-free needs
+   Twilio's toll-free verification first). Messaging → Services → create
+   one, add the number. In Vercel Production (Sensitive): `TWILIO_ACCOUNT_SID`,
+   `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID`. Cost is per text
+   segment plus a monthly number fee; check Twilio's Canada pricing. Every
+   message is plain ASCII and under 160 characters, so each is one segment.
+2. **Square webhook**: Developer console → app "Victoria Royals" →
+   Webhooks → Subscriptions → Add subscription (Production). URL
+   `https://royals-hackathon.vercel.app/api/webhooks/square` (or the real
+   domain once it exists — changing it means updating `SQUARE_WEBHOOK_URL`
+   too, it's part of the signature), API version `2025-01-23`, event
+   `order.fulfillment.updated`. Copy the subscription's **Signature key** into
+   Vercel as `SQUARE_WEBHOOK_SIGNATURE_KEY` (Sensitive) and set
+   `SQUARE_WEBHOOK_URL`. Redeploy. This is also the long-open "does webhook
+   creation work at our access level" check (`docs/validation/2026-09-08-square-validation.md`).
+   Then use the subscription's **Send test event**: a 200 means the
+   signature matches (the test order isn't at a launch stand so it's
+   ignored); a 401 means the URL or key doesn't match.
+3. **Sandbox run-through** before production: same subscription in the
+   sandbox, pointed at a tunnel to `npm run dev:sandbox` (e.g.
+   `cloudflared tunnel --url http://localhost:3001`), with the sandbox
+   signature key + tunnel URL + Twilio vars in `.env.sandbox`. Place an
+   order to your own phone, then `npm run sandbox:advance -- <orderId>
+   PREPARED` and `... COMPLETED` (no Square device needed). Expect three
+   texts, and none repeated when you re-run a step.
+4. **At the first real order**, have staff tap Ready then Complete on the
+   register, and check whether Square *also* texts the fan (it shouldn't;
+   if it does, drop our "received"/"ready" copy for that stand).
+
+**Compliance.** Order-status texts to someone who just ordered are
+transactional, and we also have an explicit opt-in (checkbox) and STOP in
+the first text. Never reuse this number or these opt-ins for marketing
+without separate CASL consent. (Not legal advice. Worth a check by the
+Royals if they want promotions later.)
+
+**Verified this session (mock data, no Square or Twilio credentials):**
+`tsc` clean, lint = the 2 existing issues. Dev server: opted-in pickup and
+in-seat orders log the "received" text after the response; opted-out
+orders send nothing; `/api/stands` reports `smsEnabled`. Webhook route:
+no signature 401, tampered body 401, valid signature at a non-launch
+location → ignored, other event types → ignored. Scratch tests of the
+state → text mapping, metadata filter (non-app and not-opted-in orders
+ignored), "Fan ····1234" names left out of the copy, E.164 normalisation,
+de-dupe (a repeat of the same stage is a no-op), declined-card cancel not
+texted, and Twilio request shape / 4xx-final / 5xx-retryable against a
+stubbed `fetch`. **Not verified:** a real Twilio send, a real Square webhook
+delivery, and whether the stands tap Ready / Complete.
 
 ---
 

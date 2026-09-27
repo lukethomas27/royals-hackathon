@@ -6,9 +6,9 @@
 // serverless runtime where instances share no disk and are recycled at
 // will. Provision it from the Vercel Marketplace (Storage → Upstash Redis)
 // and link it to this project; Vercel then injects the env vars below.
-// Both naming conventions are accepted: the Marketplace integration's
-// legacy `KV_REST_API_URL` / `KV_REST_API_TOKEN` and Upstash's own
-// `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`.
+// Both naming conventions are accepted (see redis.ts): the Marketplace
+// integration's legacy `KV_REST_API_URL` / `KV_REST_API_TOKEN` and Upstash's
+// own `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`.
 //
 // (Replaced `@vercel/kv` on 2026-09-08 — that package is deprecated; Vercel
 // KV moved to Upstash Redis under Integrations. Same key layout, so any
@@ -19,7 +19,7 @@
 // explicitly dev-only: on Vercel it would silently forget staff state, so
 // this module refuses it in production and fails loudly instead.
 
-import { Redis } from "@upstash/redis";
+import { getRedis, isProductionRuntime } from "./redis";
 import fs from "fs";
 import path from "path";
 
@@ -32,25 +32,8 @@ const DEFAULT_STATE: StandOrderingState = { manualOverride: null, scheduledCutof
 
 const KV_KEY_PREFIX = "arenapulse:stand-ordering:";
 
-function redisCredentials(): { url: string; token: string } | null {
-  const url = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
-  return url && token ? { url, token } : null;
-}
-
-let redisClient: Redis | null = null;
-function getRedis(): Redis | null {
-  if (redisClient) return redisClient;
-  const creds = redisCredentials();
-  if (!creds) return null;
-  redisClient = new Redis({ url: creds.url, token: creds.token });
-  return redisClient;
-}
-
 /** True when this deployment must not rely on the on-disk fallback. */
-function fileFallbackForbidden(): boolean {
-  return process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
-}
+const fileFallbackForbidden = isProductionRuntime;
 
 // --- dev-only fallback, used only when no Redis store is configured ---
 

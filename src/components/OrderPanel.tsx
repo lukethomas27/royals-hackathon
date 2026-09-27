@@ -26,6 +26,7 @@ export interface SquareClientConfig {
   configured: boolean; // server has an access token (else mock mode)
   applicationId: string | null;
   environment: "sandbox" | "production";
+  smsEnabled?: boolean; // server can text order updates (else hide the opt-in)
 }
 
 // --- Minimal typing for the Square Web Payments SDK (loaded from Square's CDN) ---
@@ -115,6 +116,7 @@ interface Confirmation {
   cardBrand: string | null;
   cardLast4: string | null;
   requiresIdCheck: boolean;
+  texting: boolean;
 }
 
 const inputStyle = {
@@ -150,6 +152,7 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
   // Payments are possible when the server has a token AND an app ID. With no
   // token (mock mode) the server fakes the payment, so no card is asked for.
   const paymentsEnabled = Boolean(square?.configured && square.applicationId);
+  const smsAvailable = Boolean(square?.smsEnabled);
   const paymentsBroken = Boolean(square?.configured && !square.applicationId);
   const needsCard = paymentsEnabled && !promoApplied;
 
@@ -335,7 +338,7 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
           locationId: stand.locationId,
           customerPhone: phone,
           recipientName: name.trim() || null,
-          smsOptIn,
+          smsOptIn: smsAvailable && smsOptIn,
           lines: cart.map((l) => ({ itemId: l.item.id, variationId: l.variation.id, quantity: l.quantity })),
           seat: stand.role === "in_seat" ? seat : null,
           sourceId,
@@ -355,6 +358,7 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
         cardBrand: data.cardBrand ?? null,
         cardLast4: data.cardLast4 ?? null,
         requiresIdCheck: Boolean(data.requiresIdCheck),
+        texting: Boolean(data.smsOptIn),
       });
       setPhase("confirmation");
     } catch {
@@ -578,10 +582,12 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
                 className="w-full rounded px-3 py-2 text-sm border mb-2"
                 style={inputStyle}
               />
-              <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-tertiary)" }}>
-                <input type="checkbox" checked={smsOptIn} onChange={(e) => setSmsOptIn(e.target.checked)} />
-                Text me when my order is ready. No account needed.
-              </label>
+              {smsAvailable && (
+                <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-tertiary)" }}>
+                  <input type="checkbox" checked={smsOptIn} onChange={(e) => setSmsOptIn(e.target.checked)} />
+                  Text me when my order is received, ready and complete. No account needed.
+                </label>
+              )}
             </div>
 
             <div>
@@ -676,7 +682,9 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
             </p>
             <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
               {name.trim() ? `${name.trim()}, we` : "We"} have sent your order to {stand.displayName}.
-              {stand.role === "in_seat" ? ` It is on its way to section ${seat.section}, row ${seat.row}, seat ${seat.seat}.` : " We will text you when it is ready."}
+              {stand.role === "in_seat"
+                ? ` It will be brought to section ${seat.section}, row ${seat.row}, seat ${seat.seat}.${confirmation.texting ? " We will text you when it is on the way." : ""}`
+                : confirmation.texting ? " We will text you when it is ready." : ""}
             </p>
             {confirmation.requiresIdCheck && (
               <p className="text-xs mb-4" style={{ color: "var(--text-tertiary)" }}>

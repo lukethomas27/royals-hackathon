@@ -96,6 +96,12 @@ export interface SquareCreateOrderRequest {
    * set after the server has validated the promo code (see promo.ts).
    */
   fullDiscountName?: string | null;
+  /**
+   * Fan ticked "text me". Stored in the order's metadata so the Square
+   * webhook handler knows, with no database of our own, whether to text
+   * about this order (see notify/orderUpdates.ts).
+   */
+  smsOptIn?: boolean;
 }
 
 export interface SquareCreateOrderResult {

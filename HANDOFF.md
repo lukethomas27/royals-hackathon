@@ -14,6 +14,7 @@ order to move it so nothing breaks mid-transfer.
 | Square access | Production access token from the Square app **"Victoria Royals"** inside **Eventium's** Square account, app ID `sq0idp-Nfm7Aa6OLGRNSuLR3FuKEA` | Same app — it already belongs to Eventium, not Luke. Only the *token* needs rotating once Luke is out of the loop |
 | Square dashboard login | Luke's Eventium dashboard login, scoped to the 4 stands | Whoever operates the app day to day. Luke's login gets removed when he's done |
 | Staff passcode | `STAFF_PASSCODE` env var (not yet set) | Set by the Royals' ops lead, known to stand staff only |
+| Order texts (SMS) | Not set up yet. Twilio account + number; Square webhook subscription on the "Victoria Royals" app (`STATUS.md` Sep 27) | Twilio account created on a **Royals/Eventium email**, never a personal one — the number is what fans see texts from. The webhook subscription lives in Eventium's Square app already |
 | Staff open/close store | Upstash Redis (not yet provisioned) via Vercel Marketplace | Provisioned **inside the Royals' Vercel team**, not Luke's |
 | Historical heat-map data | `public/data/games/*.json` in the repo (68 games, frozen CSV export) | Stays in the repo; no account attached |
 | Supabase project `arenapulse` | Referenced in `.env.local` only. **Unused by the code.** | Delete it, or ignore it. Nothing depends on it |
@@ -110,9 +111,12 @@ the new team — compare against the table in `.env.example`.
   is, or fans will "order" without paying. See `STATUS.md`.
 - **A real order has never been placed through this app.** The first one
   should be a staff test order on a quiet day, voided in Square afterwards.
-- **Square webhooks** are not used. There is one disabled subscription in
-  the developer console from a previous vendor (`wisevenue.com`); leave it
-  or delete it, it has no effect on this app.
+- **Square webhooks** drive the "ready" / "complete" order texts once a
+  subscription for `order.fulfillment.updated` is added (`STATUS.md` Sep 27).
+  If the production URL changes (new domain), update the subscription URL
+  *and* `SQUARE_WEBHOOK_URL` together — it's part of the signature. The
+  disabled subscription from a previous vendor (`wisevenue.com`) is
+  unrelated; leave it or delete it.
 - The **Supabase** project in `.env.local` predates the Square build and is
   dead weight. Nothing reads it.
 

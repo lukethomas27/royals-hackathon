@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { getStandByLocationId } from "@/lib/square/locations";
 import { getMenu } from "@/lib/square/catalog";
 import { createOrder, cancelOrder } from "@/lib/square/orders";
@@ -8,6 +8,7 @@ import { validateAlcoholLimits, CartLine } from "@/lib/square/tax";
 import { getSeatPickerConfig, validateSeatSelection } from "@/lib/square/stations";
 import { getStandOrderingState, isOrderingOpen } from "@/lib/staffState";
 import { isSquareConfigured } from "@/lib/square/client";
+import { notifyOrderStage } from "@/lib/notify/orderUpdates";
 
 const PHONE_RE = /^\+?[0-9\s()-]{10,15}$/;
 const NAME_MAX = 40;
@@ -127,6 +128,7 @@ export async function POST(req: NextRequest) {
     recipientName,
     standAddress: stand.address,
     fullDiscountName: promoValid ? `Promo ${promoEntered}` : null,
+    smsOptIn: Boolean(body.smsOptIn),
     requiresIdCheckNote: alcoholCheck.requiresIdCheck ? "ID CHECK REQUIRED AT HANDOFF" : undefined,
   });
 
@@ -161,6 +163,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "The payment did not go through. Try again." }, { status: 502 });
   }
 
+  // "Order received" text. Sent after the response so a slow SMS provider
+  // never delays the confirmation screen; "ready" / "complete" come later
+  // from Square via /api/webhooks/square.
+  if (body.smsOptIn) {
+    after(async () => {
+      try {
+        await notifyOrderStage("placed", {
+          orderId: order.orderId,
+          phone: body.customerPhone,
+          standName: stand.displayName,
+          fulfillmentType: stand.role === "in_seat" ? "DELIVERY" : "PICKUP",
+          pickupName: (body.recipientName ?? "").trim().slice(0, NAME_MAX) || null,
+          seat,
+          idCheck: alcoholCheck.requiresIdCheck,
+        });
+      } catch (err) {
+        console.error("[api/orders] order-received text failed", order.orderId, err);
+      }
+    });
+  }
+
   return NextResponse.json({
     orderId: order.orderId,
     paymentId: payment?.paymentId ?? null,
@@ -170,6 +193,6 @@ export async function POST(req: NextRequest) {
     cardBrand: payment?.cardBrand ?? null,
     cardLast4: payment?.cardLast4 ?? null,
     requiresIdCheck: alcoholCheck.requiresIdCheck,
-    smsOptIn: body.smsOptIn,
+    smsOptIn: Boolean(body.smsOptIn),
   });
 }
