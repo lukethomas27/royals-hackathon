@@ -16,6 +16,21 @@ const themeScript = `
 })();
 `;
 
+/**
+ * Local dev points at whatever SQUARE_ACCESS_TOKEN is in .env.local, and that
+ * is currently a PRODUCTION token for the live Eventium account. An order
+ * placed from localhost is a real order at a real stand, and with payment
+ * capture it takes real money. This banner renders only outside a production
+ * build, so it can never reach a fan.
+ */
+function liveSquareInDev(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" &&
+    Boolean(process.env.SQUARE_ACCESS_TOKEN) &&
+    process.env.SQUARE_ENVIRONMENT === "production"
+  );
+}
+
 export default function RootLayout({
   children,
 }: {
@@ -27,6 +42,12 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
+        {liveSquareInDev() && (
+          <div className="live-square-banner" role="alert">
+            <strong>LOCAL DEV — LIVE SQUARE</strong>
+            <span>Production credentials. Any order placed here is a real order at a real stand.</span>
+          </div>
+        )}
         <main className="min-h-screen">{children}</main>
       </body>
     </html>

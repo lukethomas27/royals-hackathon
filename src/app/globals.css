@@ -304,3 +304,40 @@ body {
   outline: none;
 }
 
+
+/* Checkout quote skeleton — shown while Square prices the cart. Totals are
+   never guessed locally, so there is a real wait to cover here. */
+.quote-skeleton { display: flex; flex-direction: column; gap: 0.5rem; }
+.quote-skeleton-label { font-size: 0.625rem; color: var(--text-tertiary); }
+.quote-skeleton-row {
+  height: 0.875rem;
+  border-radius: 0.25rem;
+  background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--heat-bar-bg) 37%, var(--bg-elevated) 63%);
+  background-size: 400% 100%;
+  animation: quote-shimmer 1.4s ease infinite;
+}
+.quote-skeleton-row.is-total { width: 60%; height: 1.125rem; }
+@keyframes quote-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+@media (prefers-reduced-motion: reduce) { .quote-skeleton-row { animation: none; } }
+
+/* Local-dev warning: .env.local carries PRODUCTION Square credentials, so an
+   order placed from localhost is a real order at a real stand. Rendered only
+   when NODE_ENV !== production — see liveSquareInDev() in layout.tsx. */
+.live-square-banner {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.5rem 0.875rem;
+  background: repeating-linear-gradient(45deg, #b91c1c, #b91c1c 12px, #991b1b 12px, #991b1b 24px);
+  color: #fff;
+  text-align: center;
+  line-height: 1.3;
+}
+.live-square-banner strong { font-size: 0.75rem; font-weight: 800; letter-spacing: 0.1em; }
+.live-square-banner span { font-size: 0.6875rem; opacity: 0.95; }

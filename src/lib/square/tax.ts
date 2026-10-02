@@ -1,4 +1,12 @@
-// Tax + alcohol-gating rules, per build doc section 5 and section 8.
+// Alcohol-gating rules, per build doc section 5 and section 8.
+//
+// There is deliberately NO tax calculation in this file any more. Square is
+// the only thing that prices a cart: the checkout total comes from
+// /v2/orders/calculate and the order total from /v2/orders, both with
+// pricing_options.auto_apply_taxes. The old estimateLineTax() re-implemented
+// GST/PST/Liquor locally and agreed with Square to the cent on every cart
+// tested — which is exactly how that kind of code stays wrong unnoticed once
+// a rate or a per-location assignment changes.
 //
 // Deliberately gates alcohol on the Liquor Tax assignment, never on
 // Square's "Contains Alcohol" catalog flag — that flag is Y on only 4 of 8
@@ -77,46 +85,4 @@ export function validateAlcoholLimits(
   }
 
   return { ok: true, requiresIdCheck: true, alcoholicQuantity, limit };
-}
-
-export interface TaxBreakdown {
-  gstCents: number;
-  pstCents: number;
-  liquorTaxCents: number;
-  totalTaxCents: number;
-}
-
-/**
- * Sums the tax catalog objects attached to an item and applies them to a
- * line subtotal. We never reimplement Square's own tax calculation for a
- * real order (section 5: "do not reimplement tax... read it from Square") —
- * this is only used for the fan-facing cart preview total before Square's
- * Orders API computes the authoritative figure at order creation.
- */
-export function estimateLineTax(
-  item: SquareCatalogItem,
-  subtotalCents: number,
-  taxesById: Record<string, SquareCatalogTax>
-): TaxBreakdown {
-  let gstCents = 0;
-  let pstCents = 0;
-  let liquorTaxCents = 0;
-
-  for (const taxId of item.taxIds) {
-    const tax = taxesById[taxId];
-    if (!tax || !tax.enabled) continue;
-    const pct = Number(tax.percentage) / 100;
-    const amount = Math.round(subtotalCents * pct);
-    if (isLiquorTax(tax)) liquorTaxCents += amount;
-    else if (/^pst$/i.test(tax.name)) pstCents += amount;
-    else if (/^gst$/i.test(tax.name)) gstCents += amount;
-    else gstCents += amount; // conservative default bucket
-  }
-
-  return {
-    gstCents,
-    pstCents,
-    liquorTaxCents,
-    totalTaxCents: gstCents + pstCents + liquorTaxCents,
-  };
 }

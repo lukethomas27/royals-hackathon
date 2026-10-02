@@ -98,6 +98,21 @@ export interface SquareCreateOrderRequest {
   fullDiscountName?: string | null;
 }
 
+/**
+ * A cart priced by Square via /v2/orders/calculate. Every figure here comes
+ * from Square — nothing in this app computes tax.
+ */
+export interface SquareOrderQuote {
+  currency: string;
+  subtotalCents: number;
+  discountCents: number;
+  taxCents: number;
+  totalCents: number;
+  taxLines: { name: string; percentage: string; amountCents: number }[];
+  /** "mock" when no Square credentials are configured (local dev only). */
+  source?: "live" | "mock";
+}
+
 export interface SquareCreateOrderResult {
   orderId: string;
   locationId: string;

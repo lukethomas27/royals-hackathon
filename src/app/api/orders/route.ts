@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStandByLocationId } from "@/lib/square/locations";
-import { getMenu } from "@/lib/square/catalog";
 import { createOrder, cancelOrder } from "@/lib/square/orders";
 import { chargeOrder, markZeroOrderPaid, PaymentDeclinedError } from "@/lib/square/payments";
 import { isPromoCodeValid, normalizePromoCode } from "@/lib/square/promo";
-import { validateAlcoholLimits, CartLine } from "@/lib/square/tax";
+import { validateAlcoholLimits } from "@/lib/square/tax";
+import { resolveCartLines, CartLineInput } from "@/lib/square/cart";
 import { getSeatPickerConfig, validateSeatSelection } from "@/lib/square/stations";
 import { getStandOrderingState, isOrderingOpen } from "@/lib/staffState";
-import { isSquareConfigured } from "@/lib/square/client";
+import { isSquareConfigured, SquareApiError } from "@/lib/square/client";
 
 const PHONE_RE = /^\+?[0-9\s()-]{10,15}$/;
 const NAME_MAX = 40;
@@ -16,7 +16,7 @@ interface OrderRequestBody {
   locationId: string;
   customerPhone: string;
   smsOptIn: boolean;
-  lines: { itemId: string; variationId: string; quantity: number }[];
+  lines: CartLineInput[];
   seat?: { section: string; row: string; seat: string } | null;
   /** Optional pickup name. Falls back to "Fan ····1234". */
   recipientName?: string | null;
@@ -31,15 +31,6 @@ export async function POST(req: NextRequest) {
   if (!body.customerPhone || !PHONE_RE.test(body.customerPhone)) {
     return NextResponse.json({ error: "A valid phone number is required." }, { status: 400 });
   }
-  if (!body.lines?.length) {
-    return NextResponse.json({ error: "Cart is empty." }, { status: 400 });
-  }
-  for (const line of body.lines) {
-    if (!Number.isInteger(line.quantity) || line.quantity < 1 || line.quantity > 20) {
-      return NextResponse.json({ error: "Invalid quantity." }, { status: 400 });
-    }
-  }
-
   const stand = await getStandByLocationId(body.locationId);
   if (!stand) {
     return NextResponse.json({ error: "Unknown stand." }, { status: 400 });
@@ -67,22 +58,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Re-derive cart lines from the live menu — never trust client-submitted
-  // prices or item validity.
-  const { items, taxesById } = await getMenu(stand.locationId);
-  const itemsById = new Map(items.map((i) => [i.id, i]));
-
-  const cartLines: CartLine[] = [];
-  for (const line of body.lines) {
-    const item = itemsById.get(line.itemId);
-    const variation = item?.variations.find((v) => v.id === line.variationId);
-    if (!item || !variation || variation.soldOut || !item.onlineVisible) {
-      return NextResponse.json(
-        { error: `"${item?.name ?? line.itemId}" is no longer available.` },
-        { status: 409 }
-      );
-    }
-    cartLines.push({ item, variation, quantity: line.quantity });
+  // prices or item validity. Shared with /api/quote so the total a fan was
+  // shown and the order created here are built from identical lines.
+  const cart = await resolveCartLines(stand.locationId, body.lines);
+  if (!cart.ok) {
+    return NextResponse.json({ error: cart.error }, { status: cart.status });
   }
+  const { cartLines, taxesById } = cart;
 
   const alcoholCheck = validateAlcoholLimits(cartLines, taxesById);
   if (!alcoholCheck.ok) {
@@ -115,20 +97,33 @@ export async function POST(req: NextRequest) {
   const recipientName =
     (body.recipientName ?? "").trim().slice(0, NAME_MAX) || `Fan ····${digits.slice(-4)}`;
 
-  const order = await createOrder({
-    locationId: stand.locationId,
-    lineItems: cartLines.map((l) => ({
-      catalogObjectId: l.variation.id,
-      quantity: String(l.quantity),
-    })),
-    fulfillmentType: stand.role === "in_seat" ? "DELIVERY" : "PICKUP",
-    seat,
-    customerPhone: body.customerPhone,
-    recipientName,
-    standAddress: stand.address,
-    fullDiscountName: promoValid ? `Promo ${promoEntered}` : null,
-    requiresIdCheckNote: alcoholCheck.requiresIdCheck ? "ID CHECK REQUIRED AT HANDOFF" : undefined,
-  });
+  let order;
+  try {
+    order = await createOrder({
+      locationId: stand.locationId,
+      lineItems: cartLines.map((l) => ({
+        catalogObjectId: l.variation.id,
+        quantity: String(l.quantity),
+      })),
+      fulfillmentType: stand.role === "in_seat" ? "DELIVERY" : "PICKUP",
+      seat,
+      customerPhone: body.customerPhone,
+      recipientName,
+      standAddress: stand.address,
+      fullDiscountName: promoValid ? `Promo ${promoEntered}` : null,
+      requiresIdCheckNote: alcoholCheck.requiresIdCheck ? "ID CHECK REQUIRED AT HANDOFF" : undefined,
+    });
+  } catch (err) {
+    // A Square rejection used to escape as an unhandled 500, which the client
+    // reported to the fan as "Couldn't reach the order system" — indistinguishable
+    // from the arena wifi dropping. Log the detail, tell the fan the truth.
+    const detail = err instanceof SquareApiError ? err.body : String(err);
+    console.error("[api/orders] Square rejected order creation", JSON.stringify(detail));
+    return NextResponse.json(
+      { error: "The stand's till rejected this order. Nothing was charged — please order at the counter." },
+      { status: 502 }
+    );
+  }
 
   // Pay it. Square only shows an order to staff once it is paid.
   let payment: Awaited<ReturnType<typeof chargeOrder>> | null = null;
