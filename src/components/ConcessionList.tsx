@@ -2,10 +2,13 @@
 
 import { HeatState, SimulationStats } from "@/lib/types";
 import { MapStand } from "./ArenaMap";
+import { StandBusyness } from "@/lib/square/busyness";
 
 interface ConcessionListProps {
   stands: MapStand[];
   heatState: HeatState;
+  /** Live busyness by location ID. Takes precedence over simulated heat. */
+  busyness?: Record<string, StandBusyness>;
   activeLocations: Set<string> | null; // heatmapKeys
   bestLocation: string | null; // heatmapKey
   onNodeClick?: (locationId: string) => void;
@@ -39,11 +42,6 @@ function heatToColor(heat: number): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-/** Same model the menu panel uses, so the list and the menu agree. */
-function estimateWaitMinutes(heat: number): number {
-  return Math.round(heat * 15);
-}
-
 function heatLabel(heat: number): string {
   if (heat < 0.15) return "Quiet";
   if (heat < 0.35) return "Low";
@@ -55,10 +53,10 @@ function heatLabel(heat: number): string {
 export default function ConcessionList({
   stands,
   heatState,
+  busyness,
   activeLocations,
   bestLocation,
   onNodeClick,
-  stats,
   inSeatSection = "108",
 }: ConcessionListProps) {
   // Open stands first — a closed stand is not an option right now, however
@@ -74,14 +72,18 @@ export default function ConcessionList({
   return (
     <div className="w-full space-y-2">
       {sorted.map((s) => {
-        const heat = (s.heatmapKey && heatState[s.heatmapKey]) || 0;
-        const color = heatToColor(heat);
+        const live = busyness?.[s.locationId];
+        // Live busyness wins. "closed" and "unknown" get no colour and no
+        // label — a closed stand reads zero orders, which would look "Quiet".
+        const liveHeat = live ? (live.state === "live" ? live.heat : null) : (s.heatmapKey && heatState[s.heatmapKey]) || 0;
+        const heat = liveHeat ?? 0;
+        const statusText =
+          live?.state === "closed" ? "Closed" : liveHeat === null ? "No live data" : heatLabel(heat);
+        const color = liveHeat === null ? "var(--text-tertiary)" : heatToColor(heat);
         const isDimmed = activeLocations !== null && s.heatmapKey !== null && !activeLocations.has(s.heatmapKey);
         const isBest = s.heatmapKey !== null && bestLocation === s.heatmapKey;
-        const txCount = (s.heatmapKey && stats?.perLocation[s.heatmapKey]?.transactionCount) || 0;
         const badge =
           s.role === "in_seat" ? `Delivered to your seat · section ${inSeatSection} area` : "Pick up at the stand";
-        const waitMin = estimateWaitMinutes(heat);
 
         return (
           <button
@@ -135,16 +137,18 @@ export default function ConcessionList({
             {/* Heat status */}
             <div className="text-right shrink-0">
               <div className="text-xs font-semibold" style={{ color }}>
-                {heatLabel(heat)}
+                {statusText}
               </div>
-              <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
-                {heat > 0 ? `~${waitMin} min` : txCount > 0 ? `${txCount} txns` : "no wait data"}
-              </div>
+              {liveHeat !== null && (
+                <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+                  last 15 min
+                </div>
+              )}
             </div>
 
             {/* Heat bar — hidden on the narrowest phones, where the label and
                 the colour stripe already carry the same information. */}
-            <div className="hidden min-[360px]:block w-12 sm:w-16 shrink-0">
+            <div className="hidden min-[360px]:block w-12 sm:w-16 shrink-0" style={{ visibility: liveHeat === null ? "hidden" : "visible" }}>
               <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: "var(--heat-bar-bg)" }}>
                 <div
                   className="h-full rounded-full"

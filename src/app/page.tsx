@@ -14,6 +14,7 @@ import {
   SimulationConfig,
 } from "@/lib/simulation";
 import { GameData, GameIndex, HeatState, SimulationStats, Transaction } from "@/lib/types";
+import { BusynessSnapshot, StandBusyness, MAX_AGE_MS } from "@/lib/square/busyness";
 import { FanCategory, getDataCategories, getActiveLocations } from "@/lib/categories";
 import { findBestTimes } from "@/lib/demandTimeline";
 
@@ -38,6 +39,12 @@ export default function Home() {
   // map is one tap away on the toggle below. (No persistence today — a
   // returning visitor also lands on List.)
   const [viewMode, setViewMode] = useState<"map" | "list">("list");
+  const [busyness, setBusyness] = useState<BusynessSnapshot | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  // The simulation is a demo tool, not a fan feature. Gated on NODE_ENV alone
+  // — a query flag would let anyone switch it on against the live URL.
+  const devTools = process.env.NODE_ENV !== "production";
   const engineRef = useRef<SimulationEngine | null>(null);
   const gameTransactions = useRef<Transaction[]>([]);
 
@@ -114,6 +121,48 @@ export default function Home() {
         setHeatState(initial);
       });
   }, []);
+
+  // Live busyness. The route caches server-side, so this poll is cheap and
+  // never turns into a Square call per page view.
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      fetch("/api/busyness")
+        .then((r) => r.json())
+        .then((data: BusynessSnapshot) => {
+          if (!cancelled) setBusyness(data);
+        })
+        .catch(() => {
+          if (!cancelled) setBusyness(null);
+        });
+    };
+    load();
+    const poll = setInterval(load, 60_000);
+    const tick = setInterval(() => setNow(Date.now()), 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+      clearInterval(tick);
+    };
+  }, []);
+
+  const busynessByLocation = useMemo(() => {
+    const map: Record<string, StandBusyness> = {};
+    const stale = busyness ? now - new Date(busyness.asOf).getTime() > MAX_AGE_MS : true;
+    for (const s of busyness?.stands ?? []) {
+      // Past MAX_AGE_MS we stop claiming it is live rather than showing a
+      // colour that looks current.
+      map[s.locationId] = stale && s.state === "live" ? { ...s, state: "unknown", heat: null, label: null } : s;
+    }
+    return map;
+  }, [busyness, now]);
+
+  const updatedAgoLabel = useMemo(() => {
+    if (!busyness) return null;
+    const mins = Math.floor((now - new Date(busyness.asOf).getTime()) / 60_000);
+    if (mins < 1) return "updated just now";
+    return `updated ${mins} min ago`;
+  }, [busyness, now]);
 
   const handleUpdate = useCallback(
     (heat: HeatState, time: string, prog: number, newStats: SimulationStats) => {
@@ -231,11 +280,18 @@ export default function Home() {
         ))}
       </div>
 
+      {updatedAgoLabel && (
+        <p className="w-full text-[10px] mb-2 text-right" style={{ color: "var(--text-tertiary)" }}>
+          Busyness from sales in the last 15 min · {updatedAgoLabel}
+        </p>
+      )}
+
       {viewMode === "map" ? (
         <>
           <ArenaMap
             stands={stands}
             heatState={heatState}
+            busyness={busynessByLocation}
             activeLocations={activeLocations}
             bestLocation={bestLocation}
             onNodeClick={setSelectedStandId}
@@ -257,6 +313,7 @@ export default function Home() {
           <ConcessionList
             stands={stands}
             heatState={heatState}
+            busyness={busynessByLocation}
             activeLocations={activeLocations}
             bestLocation={bestLocation}
             onNodeClick={setSelectedStandId}
@@ -270,7 +327,7 @@ export default function Home() {
         <BestTimeCard result={bestTimeResult} context={bestTimeContext} />
       )}
 
-      {simTime && (
+      {devTools && simTime && (
         <div className="text-center mb-4">
           <p className="text-lg font-mono" style={{ color: "var(--text-primary)" }}>{simTime}</p>
           <div className="w-48 h-1.5 rounded-full mt-2" style={{ backgroundColor: "var(--progress-bg)" }}>
@@ -286,6 +343,7 @@ export default function Home() {
         </div>
       )}
 
+      {devTools && (
       <div className="w-full space-y-3">
         <select
           value={selectedDate}
@@ -344,6 +402,7 @@ export default function Home() {
           {isRunning ? "Stop Simulation" : "Start Simulation"}
         </button>
       </div>
+      )}
 
       {/* Order panel: live menu, cart and checkout for the selected stand */}
       {pickerOpen && (
@@ -360,6 +419,7 @@ export default function Home() {
 
       {selectedStand && (
         <OrderPanel
+          busyness={busynessByLocation[selectedStand.locationId] ?? null}
           stand={selectedStand}
           heat={selectedStandHeat}
           square={squareConfig}
