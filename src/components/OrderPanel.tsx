@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SquareCatalogItem, SquareCatalogTax, SquareOrderQuote } from "@/lib/square/types";
 import { isAlcoholicItem, is24ozVariation, validateAlcoholLimits, CartLine } from "@/lib/square/tax";
 import { MapStand } from "./ArenaMap";
+import { StandBusyness } from "@/lib/square/busyness";
 
 // Display order for live category names (Square reporting categories).
 // Matching is fuzzy on purpose — names are Eventium's and may be renamed.
@@ -81,6 +82,8 @@ function loadSquareSdk(env: "sandbox" | "production"): Promise<void> {
 interface OrderPanelProps {
   stand: MapStand;
   heat: number;
+  /** Live busyness for this stand. null while it loads. */
+  busyness?: StandBusyness | null;
   square: SquareClientConfig | null;
   onClose: () => void;
 }
@@ -90,10 +93,6 @@ function heatLabel(heat: number): { text: string; color: string } {
   if (heat < 0.5) return { text: "Moderate", color: "#eab308" };
   if (heat < 0.75) return { text: "Busy", color: "#f97316" };
   return { text: "Very busy", color: "#ef4444" };
-}
-
-function estimateWaitMinutes(heat: number): number {
-  return Math.round(heat * 15);
 }
 
 function money(cents: number): string {
@@ -123,7 +122,7 @@ const inputStyle = {
   color: "var(--text-primary)",
 } as const;
 
-export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelProps) {
+export default function OrderPanel({ stand, heat, busyness, square, onClose }: OrderPanelProps) {
   const [items, setItems] = useState<SquareCatalogItem[]>([]);
   const [taxesById, setTaxesById] = useState<Record<string, SquareCatalogTax>>({});
   const [menuSource, setMenuSource] = useState<"live" | "mock" | null>(null);
@@ -235,8 +234,16 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
     return new Map([...groups.entries()].sort(([a], [b]) => rank(a) - rank(b)));
   }, [items]);
 
-  const status = heatLabel(heat);
-  const waitMin = estimateWaitMinutes(heat);
+  // Live busyness when we have it, otherwise the simulated heat (dev only).
+  // No wait estimate: this account gives no queue depth and no prep times —
+  // see src/lib/square/busyness.ts.
+  const liveHeat = busyness ? (busyness.state === "live" ? busyness.heat : null) : heat;
+  const status =
+    busyness?.state === "closed"
+      ? { text: "Closed", color: "var(--text-tertiary)" }
+      : liveHeat === null
+        ? { text: "No live data", color: "var(--text-tertiary)" }
+        : heatLabel(liveHeat);
 
   function addToCart(item: SquareCatalogItem, variationId: string) {
     const variation = item.variations.find((v) => v.id === variationId);
@@ -453,7 +460,9 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
                 <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: status.color }} />
                 <span className="text-sm font-semibold" style={{ color: status.color }}>{status.text}</span>
               </div>
-              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>~{waitMin} min wait</span>
+              <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+                {liveHeat === null ? "" : "based on sales in the last 15 min"}
+              </span>
             </div>
 
             {menuSource === "mock" && (

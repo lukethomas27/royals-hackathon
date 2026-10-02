@@ -1,6 +1,7 @@
 "use client";
 
 import { HeatState, SimulationStats } from "@/lib/types";
+import { StandBusyness } from "@/lib/square/busyness";
 
 export interface MapStand {
   slot: number;
@@ -16,6 +17,8 @@ export interface MapStand {
 interface ArenaMapProps {
   stands: MapStand[];
   heatState: HeatState;
+  /** Live busyness by location ID. Takes precedence over simulated heat. */
+  busyness?: Record<string, StandBusyness>;
   activeLocations: Set<string> | null; // heatmapKeys
   bestLocation: string | null; // heatmapKey
   onNodeClick?: (locationId: string) => void;
@@ -151,7 +154,17 @@ function rrectPath(cx: number, cy: number, hw: number, hh: number, cr: number): 
     Z`;
 }
 
-export default function ArenaMap({ stands, heatState, activeLocations, bestLocation, onNodeClick, stats, inSeatSection = "108" }: ArenaMapProps) {
+export default function ArenaMap({ stands, heatState, busyness, activeLocations, bestLocation, onNodeClick, stats, inSeatSection = "108" }: ArenaMapProps) {
+  /**
+   * Live busyness wins when we have it. A stand that is closed, or whose data
+   * is stale or unavailable, gets no colour at all — a grey node is honest,
+   * a green one is not.
+   */
+  const heatFor = (locationId: string, heatmapKey: string | null): number | null => {
+    const live = busyness?.[locationId];
+    if (live) return live.state === "live" ? live.heat : null;
+    return (heatmapKey && heatState[heatmapKey]) || 0;
+  };
   const rinkPath = rrectPath(CX, CY, RINK_HW, RINK_HH, CORNER_R);
   const bowlPath = rrectPath(CX, CY, BOWL_HW, BOWL_HH, BOWL_CR);
   const concoursePath = rrectPath(CX, CY, CONC_HW, CONC_HH, CONC_CR);
@@ -220,8 +233,11 @@ export default function ArenaMap({ stands, heatState, activeLocations, bestLocat
 
         {/* Per-node gradients */}
         {nodes.map((s) => {
-          const heat = (s.heatmapKey && heatState[s.heatmapKey]) || 0;
-          const color = heatToColor(heat);
+          const liveHeat = heatFor(s.locationId, s.heatmapKey);
+          const heat = liveHeat ?? 0;
+          const noData = liveHeat === null;
+          // No live data: neutral grey, never a reassuring green.
+          const color = noData ? { r: 120, g: 120, b: 128 } : heatToColor(heat);
           const cs = colorToString(color);
           const light = lighten(color, 45);
           const dark = darken(color, 35);
@@ -332,8 +348,10 @@ export default function ArenaMap({ stands, heatState, activeLocations, bestLocat
 
       {/* ════════════════ STAND NODES ════════════════ */}
       {nodes.map((s) => {
-        const heat = (s.heatmapKey && heatState[s.heatmapKey]) || 0;
-        const color = heatToColor(heat);
+        const liveHeat = heatFor(s.locationId, s.heatmapKey);
+        const heat = liveHeat ?? 0;
+        const noData = liveHeat === null;
+        const color = noData ? { r: 120, g: 120, b: 128 } : heatToColor(heat);
         const cs = colorToString(color);
         const bloomSize = 34 + heat * 48;
         const isHot = heat > 0.4;
