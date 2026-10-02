@@ -7,6 +7,7 @@ import { MapStand } from "./ArenaMap";
 import { StandBusyness } from "@/lib/square/busyness";
 import BusynessMeter from "./BusynessMeter";
 import ItemDetailSheet from "./ItemDetailSheet";
+import { primeChime, TrackedOrder } from "@/lib/trackedOrders";
 
 // Display order for live category names (Square reporting categories).
 // Matching is fuzzy on purpose — names are Eventium's and may be renamed.
@@ -93,27 +94,19 @@ interface OrderPanelProps {
   onCartStandChange: (locationId: string | null) => void;
   square: SquareClientConfig | null;
   onClose: () => void;
+  /** Paid and sent to the stand. The page takes over with the live tracker. */
+  onOrderPlaced: (order: TrackedOrder) => void;
 }
 
 function money(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-type Phase = "menu" | "checkout" | "confirmation";
+type Phase = "menu" | "checkout";
 
 interface SeatConfig {
   mode: "live" | "fallback" | "unavailable";
   validSections: string[];
-}
-
-interface Confirmation {
-  orderId: string;
-  paidWith: "card" | "promo" | "mock";
-  amount: { amount: number; currency: string };
-  receiptUrl: string | null;
-  cardBrand: string | null;
-  cardLast4: string | null;
-  requiresIdCheck: boolean;
 }
 
 const inputStyle = {
@@ -131,6 +124,7 @@ export default function OrderPanel({
   onCartStandChange,
   square,
   onClose,
+  onOrderPlaced,
 }: OrderPanelProps) {
   const [items, setItems] = useState<SquareCatalogItem[]>([]);
   const [taxesById, setTaxesById] = useState<Record<string, SquareCatalogTax>>({});
@@ -139,7 +133,6 @@ export default function OrderPanel({
   const [phase, setPhase] = useState<Phase>("menu");
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
-  const [smsOptIn, setSmsOptIn] = useState(true);
   const [seatConfig, setSeatConfig] = useState<SeatConfig | null>(null);
   const [seat, setSeat] = useState({ section: "", row: "", seat: "" });
   const [promoInput, setPromoInput] = useState("");
@@ -147,7 +140,6 @@ export default function OrderPanel({
   const [promoMessage, setPromoMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
 
   // Card entry (Square Web Payments SDK)
   const cardRef = useRef<SquareCard | null>(null);
@@ -364,6 +356,8 @@ export default function OrderPanel({
   }
 
   async function submitOrder() {
+    // Synchronously inside the tap, so iOS will let the "ready" chime play later.
+    primeChime();
     setError(null);
     setSubmitting(true);
     try {
@@ -404,7 +398,6 @@ export default function OrderPanel({
           locationId: stand.locationId,
           customerPhone: phone,
           recipientName: name.trim(),
-          smsOptIn,
           lines: cart.map((l) => ({ itemId: l.item.id, variationId: l.variation.id, quantity: l.quantity })),
           seat: stand.role === "in_seat" ? seat : null,
           sourceId,
@@ -416,20 +409,26 @@ export default function OrderPanel({
         setError(data.error ?? "Something went wrong placing the order.");
         return;
       }
-      setConfirmation({
+      // The cart lives in the page now, so a completed order has to clear it
+      // explicitly — unmounting the panel no longer throws it away.
+      setCart([]);
+      onCartStandChange(null);
+      onOrderPlaced({
         orderId: data.orderId,
+        locationId: stand.locationId,
+        standName: stand.fanName ?? stand.displayName,
+        role: stand.role,
+        recipientName: name.trim(),
+        seat: stand.role === "in_seat" ? seat : null,
+        placedAt: Date.now(),
         paidWith: data.paidWith,
         amount: data.amount,
         receiptUrl: data.receiptUrl ?? null,
         cardBrand: data.cardBrand ?? null,
         cardLast4: data.cardLast4 ?? null,
         requiresIdCheck: Boolean(data.requiresIdCheck),
+        stage: "received",
       });
-      // The cart lives in the page now, so a completed order has to clear it
-      // explicitly — unmounting the panel no longer throws it away.
-      setCart([]);
-      onCartStandChange(null);
-      setPhase("confirmation");
     } catch {
       setError("Could not reach the order system. Try again.");
     } finally {
@@ -725,13 +724,11 @@ export default function OrderPanel({
                 className="w-full rounded px-3 py-2 text-sm border mb-2"
                 style={inputStyle}
               />
-              <p className="text-[10px] mb-2" style={{ color: "var(--text-tertiary)" }}>
-                Staff call your name at {stand.role === "in_seat" ? "delivery" : "pickup"}. Name and phone are both required.
+              <p className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+                Staff call your name at {stand.role === "in_seat" ? "delivery" : "pickup"}, and use your phone only if
+                they can&apos;t find you. Name and phone are both required. After you pay, this page shows when your
+                order is ready — no texts, no account.
               </p>
-              <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-tertiary)" }}>
-                <input type="checkbox" checked={smsOptIn} onChange={(e) => setSmsOptIn(e.target.checked)} />
-                Text me when my order is ready. No account needed.
-              </label>
             </div>
 
             <div>
@@ -817,39 +814,6 @@ export default function OrderPanel({
             <p className="text-[10px] text-center" style={{ color: "var(--text-tertiary)" }}>
               Payments are processed by Square. Your order goes straight to the stand once it is paid.
             </p>
-          </div>
-        )}
-
-        {phase === "confirmation" && confirmation && (
-          <div className="text-center py-6">
-            <p className="text-lg font-bold mb-2" style={{ color: "var(--text-primary)" }}>Order received</p>
-            <p className="text-sm mb-1" style={{ color: "var(--text-secondary)" }}>
-              {confirmation.paidWith === "card" && confirmation.cardLast4
-                ? `Paid ${money(confirmation.amount.amount)} · ${confirmation.cardBrand ?? "Card"} ····${confirmation.cardLast4}`
-                : confirmation.paidWith === "promo"
-                  ? "Paid with promo code · $0.00"
-                  : `Total ${money(confirmation.amount.amount)}`}
-            </p>
-            <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-              {name.trim() ? `${name.trim()}, we` : "We"} have sent your order to {stand.fanName ?? stand.displayName}.
-              {stand.role === "in_seat" ? ` It is on its way to section ${seat.section}, row ${seat.row}, seat ${seat.seat}.` : " We will text you when it is ready."}
-            </p>
-            {confirmation.requiresIdCheck && (
-              <p className="text-xs mb-4" style={{ color: "var(--text-tertiary)" }}>
-                Have your ID ready — this order includes alcohol.
-              </p>
-            )}
-            {confirmation.receiptUrl && (
-              <p className="text-xs mb-3">
-                <a href={confirmation.receiptUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--accent-gold)" }}>
-                  View Square receipt
-                </a>
-              </p>
-            )}
-            <p className="text-[10px] mb-4" style={{ color: "var(--text-tertiary)" }}>Order ref: {confirmation.orderId}</p>
-            <button onClick={onClose} className="py-2 px-4 rounded-lg font-semibold" style={{ backgroundColor: "var(--btn-bg)", color: "var(--btn-text)" }}>
-              Done
-            </button>
           </div>
         )}
       </div>

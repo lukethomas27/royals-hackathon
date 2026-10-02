@@ -57,6 +57,41 @@ Then run the 6-step smoke test in `HANDOFF.md` §6.
 
 ---
 
+## Update — Oct 2, 2026: SMS dropped, live order tracker instead
+
+Texting the fan needed a messaging subscription we don't have, so the "Text
+me when my order is ready" promise is gone. Instead, the page the fan paid on
+**stays open as a live tracker** and follows the order through Square:
+
+- **Received → Preparing → Ready → Picked up / Delivered** (or Canceled), read
+  from the order's fulfillment state: PROPOSED / RESERVED / PREPARED /
+  COMPLETED. `src/lib/square/orderStatus.ts` has the mapping.
+- **It only moves if staff move it in Square** (POS Orders tab / Order
+  Manager / KDS: *Mark in progress*, *Mark ready*, *Complete*). Luke says
+  staff do this. **Still to check on the next test order:** does the fan's
+  screen actually reach "Ready"? If staff only work from the printed ticket,
+  every tracker sits on "Received" for the whole order.
+- `GET /api/orders/status?ids=` makes one `BatchRetrieveOrders` call per poll
+  for up to 5 orders. It only reports orders at the four configured stands and
+  returns the stage only (no name, phone or seat). There are no webhooks and no
+  new infrastructure.
+- **Browser side** (`src/lib/trackedOrders.ts`):
+  - Polls every 10s, and only while the tab is visible. It catches up straight
+    away when the phone is unlocked, and stops once every order is finished.
+  - Orders are kept in localStorage (6h expiry, up to 5), so a reload or a
+    closed panel restores them. The home page shows a "Your order" bar.
+- **Ready alert:**
+  - Vibrates the phone (Android only; iOS has no vibration API).
+  - Plays a short chime, primed on the Pay tap so iOS allows it.
+  - Shows a large gold "Ready for pickup" state.
+  - No notification permission or subscription is involved.
+- **Phone is still required.** Square requires it on delivery orders, and
+  staff can call a fan who doesn't show up. The SMS checkbox and `smsOptIn`
+  field are removed from the UI and `/api/orders`.
+- In mock mode (no token), the order walks through the stages on a clock
+  (preparing at 15s, ready at 45s, done at 90s), so demos show the whole
+  flow. Verified end to end in headless Chromium against mock mode.
+
 ## Update — Sep 18, 2026 (overnight): payment capture built, first real order is TODAY
 
 Read `PREFLIGHT.md` — it is the checklist for the test order at SOFMC on
@@ -512,8 +547,8 @@ everything below:
 - **No ops dashboard, no order queue, no KDS, no staff app** (section 6) —
   none of that was built. The one exception scope explicitly reopened
   (section 6a) — staff open/close control — is at `/staff`.
-- **Phone + SMS only, no accounts** (section 6/9). `OrderPanel.tsx` never
-  asks for anything but a phone number and an SMS opt-in checkbox.
+- **Name + phone only, no accounts** (section 6/9). The SMS opt-in was
+  dropped Oct 2 in favour of the live on-page tracker (see that update).
 - **Orders created against the correct location ID** (section 5, build-team
   rule 5) — `/api/orders` resolves the stand from `locationId` and creates
   the Square order there, never against a default/wrong location.

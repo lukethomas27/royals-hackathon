@@ -183,7 +183,9 @@ Notes from the sandbox run:
 
 - Vercel Hobby plan forbids commercial use. A refunded test charge is a
   grey area; move to a paid team before any real sales (`HANDOFF.md`).
-- No SMS is sent even though the checkbox says so. Staff call the name /
+- *(Fixed Oct 2: the SMS checkbox is gone; the page tracks the order live
+  from Square instead. That only works if staff mark it Ready in Square.)*
+  Previously: no SMS is sent even though the checkbox says so. Staff call the name /
   deliver to the seat. Decide ask #3 before launch.
 - The coupon is a single shared code with no usage limit. It exists only
   for supervised tests.

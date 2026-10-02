@@ -30,6 +30,7 @@ src/app/staff/page.tsx            # Staff control surface — passcode-gated ope
 src/app/api/stands/route.ts       # GET — live stand list (Square locations + ordering state)
 src/app/api/menu/route.ts         # GET ?locationId= — live orderable menu for one stand
 src/app/api/orders/route.ts       # POST — validates, creates the Square order, then pays it (card or promo)
+src/app/api/orders/status/route.ts # GET ?ids= — live stage of the fan's orders (replaces SMS; polled by the tracker)
 src/app/api/promo/route.ts        # GET ?code= — is the 100%-off test coupon valid (ORDER_PROMO_CODE)
 src/app/api/health/route.ts       # GET — non-secret readiness flags (square/redis/payments/promo)
 src/app/api/seat-config/route.ts  # GET — seat picker config (live Ordering Stations or fallback)
@@ -44,12 +45,15 @@ src/lib/square/                   # All Square API integration — see STATUS.md
   orders.ts      # Square order creation (fulfillment recipient/prep/address per Square docs) + cancel
   payments.ts    # CreatePayment for the order total; PayOrder for $0 (promo) orders
   promo.ts       # ORDER_PROMO_CODE validation — test-only 100% coupon
+  orderStatus.ts # Fulfillment state -> Received/Preparing/Ready/Done; four-stand scoped BatchRetrieveOrders
   stations.ts    # Seat/row picker — live-read shape, unconfirmed API, see STATUS.md
   mock.ts        # Dev-only fallback data, used when SQUARE_ACCESS_TOKEN is unset
 src/lib/staffState.ts             # Staff open/close + cutoff persistence (dev-only, see STATUS.md)
+src/lib/trackedOrders.ts          # Fan's placed orders in localStorage + polling hook + ready vibrate/chime
+src/components/OrderTracker.tsx   # Live tracker sheet (post-payment) + "Your order" bar on the home page
 src/components/ArenaMap.tsx       # SVG arena with heat-mapped stands, driven by live Stand[] data
 src/components/ConcessionList.tsx # List view of stands, same live data
-src/components/OrderPanel.tsx     # Menu browse → cart → checkout → confirmation for one stand
+src/components/OrderPanel.tsx     # Menu browse → cart → checkout for one stand; hands off to OrderTracker
 src/components/CategoryFilter.tsx # Category filter chips (food, beer, drinks, snacks)
 src/components/DemandTimeline.tsx # Demand timeline chart
 src/components/ThemeToggle.tsx    # Light/dark theme toggle
@@ -65,7 +69,7 @@ public/data/games/               # 68 game JSON files + index.json
 
 **Heat map (carried forward from the prototype):** CSV files → `process-data.ts` → JSON in `public/data/games/` → fetched by page → `SimulationEngine` replays transactions → `ArenaMap` renders heat colors. Keyed to a launch stand via `Stand.heatmapKey` (see `getHeatmapKeyForSlot` in `square/config.ts`) — this is the *only* place the old CSV location-name strings are still used, and only to link historical data, never for display or ordering.
 
-**Menu/ordering:** fan picks a stand → `/api/menu?locationId=` reads live from Square → cart → checkout tokenizes the card with Square's Web Payments SDK (or applies the promo code) → `/api/orders` re-validates everything server-side (price, availability, alcohol limits, ordering-open state, seat) → creates a Square order against that stand's location ID → pays it (CreatePayment, or PayOrder with no payments when the total is $0). Square only shows an order to staff once it is paid.
+**Menu/ordering:** fan picks a stand → `/api/menu?locationId=` reads live from Square → cart → checkout tokenizes the card with Square's Web Payments SDK (or applies the promo code) → `/api/orders` re-validates everything server-side (price, availability, alcohol limits, ordering-open state, seat) → creates a Square order against that stand's location ID → pays it (CreatePayment, or PayOrder with no payments when the total is $0). Square only shows an order to staff once it is paid. The panel then becomes a live tracker that polls `/api/orders/status` until staff mark the order completed in Square. There is no SMS: the open page is the alert.
 
 ## Busyness (live, from Square orders)
 

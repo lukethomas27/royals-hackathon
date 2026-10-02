@@ -97,7 +97,8 @@ enforced server-side; delivery restricted to 107–111; staff open/close with
 closed-by-default; orders created against the correct stand so revenue
 reports out of the right concession.
 
-**Not built:** payment capture (the blocker), the "text me when ready" SMS,
+**Not built:** payment capture (the blocker), the "text me when ready" SMS (replaced Oct 2 by a live on-page order tracker,
+which needs staff to mark orders Ready in Square),
 a proper seat picker (fans type row/seat today), and no real order has ever
 been placed.
 
@@ -112,7 +113,10 @@ been placed.
    Square. Fan Deck prints tickets immediately; do Concessions 1–3 have a
    printer/KDS, or does someone watch the register? Decides whether we need
    an alert screen. → Eventium
-3. **Who texts the fan?** We collect the number and opt-in but send nothing.
+3. ~~**Who texts the fan?**~~ **Decided Oct 2: nobody.** The open page tracks
+   the order live from its Square status instead. Remaining ask: confirm each
+   stand marks online orders *Ready* in Square. Original ask: we collect the
+   number and opt-in but send nothing.
    Square's own notifications (needs testing on API-created orders), our own
    SMS service, or drop the promise and use order numbers on a board. → Eventium
 4. **Pick a test-order window.** Quiet non-game hour, someone at the Fan Deck

@@ -20,8 +20,8 @@ const NAME_MAX = 40;
 
 interface OrderRequestBody {
   locationId: string;
+  /** Contact for staff only (Square requires it on delivery). Never texted. */
   customerPhone: string;
-  smsOptIn: boolean;
   lines: CartLineInput[];
   seat?: { section: string; row: string; seat: string } | null;
   /** Name called out at handoff. Required. */
@@ -174,6 +174,5 @@ export async function POST(req: NextRequest) {
     cardBrand: payment?.cardBrand ?? null,
     cardLast4: payment?.cardLast4 ?? null,
     requiresIdCheck: alcoholCheck.requiresIdCheck,
-    smsOptIn: body.smsOptIn,
   });
 }
