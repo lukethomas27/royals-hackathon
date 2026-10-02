@@ -37,20 +37,20 @@ export interface BusynessSnapshot {
 }
 
 /**
- * Orders per minute each stand sustains when it is genuinely slammed — the
- * p95 of its 15-minute rates across the active buckets of a real game night
- * (Sep 26-27, 2026: 14 active buckets of >=20 orders across the four stands).
+ * Orders per minute each stand sustains when it is genuinely slammed, set to
+ * its observed peak 15-minute rate on a real game night (Sep 26-27, 2026)
+ * times 1.15. The headroom means a normal intermission reads high but not
+ * pinned, leaving room for a genuinely worse night to read worse.
  *
- * Seeds only. Once there is enough history, refreshReferenceRates() recomputes
- * these from game nights and caches the result; quiet weekdays are excluded
- * deliberately, because averaging them in would drag the p95 down until every
- * game night read "Very busy".
+ * Seeds only, and derived from one night. Recompute from several game nights
+ * once there is history; quiet days must be excluded, because averaging them
+ * in would drag the reference down until every game read "Very busy".
  */
 const SEED_REFERENCE_RATES: Record<string, number> = {
-  "06KYFX4ZMH3XB": 7.2, // Island Canteen
-  LARSXNSYK7Z6G: 3.867, // Island Slice
-  L21YPQA79XH0J: 3.333, // TacoTacoTaco
-  LZQZQS9G9XF1M: 4.333, // ReMax Fan Deck
+  "06KYFX4ZMH3XB": 8.28, // Island Canteen — peak 7.20/min at 18:45 PT
+  LARSXNSYK7Z6G: 4.447, // Island Slice — peak 3.87/min at 19:00 PT
+  L21YPQA79XH0J: 3.833, // TacoTacoTaco — peak 3.33/min at 18:45 PT
+  LZQZQS9G9XF1M: 4.983, // ReMax Fan Deck — peak 4.33/min at 18:45 PT
 };
 
 /** Fallback for a stand with no seed and no history yet. */

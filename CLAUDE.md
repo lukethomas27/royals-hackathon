@@ -67,6 +67,32 @@ public/data/games/               # 68 game JSON files + index.json
 
 **Menu/ordering:** fan picks a stand → `/api/menu?locationId=` reads live from Square → cart → checkout tokenizes the card with Square's Web Payments SDK (or applies the promo code) → `/api/orders` re-validates everything server-side (price, availability, alcohol limits, ordering-open state, seat) → creates a Square order against that stand's location ID → pays it (CreatePayment, or PayOrder with no payments when the total is $0). Square only shows an order to staff once it is paid.
 
+## Busyness (live, from Square orders)
+
+- Busyness comes from **real Square order volume**, not the simulation:
+  orders/min over a rolling 15 min, from `/api/busyness` (one SearchOrders call
+  for all four stands per ~45s, cached). Only the four configured location IDs
+  are ever queried — the token reaches 62.
+- **It is self-relative per stand.** `heat = rate / that stand's own reference
+  rate`, where the reference is its observed peak 15-min rate on a game night
+  x 1.15. So heat answers "how busy is this stand compared to its own worst",
+  not "which stand has the shortest line".
+- **Consequence to know:** at intermission every stand sits near its own peak,
+  so all four read "Very busy" at once. That is honest — they really are all
+  slammed — but it means the map does not discriminate between stands at the
+  busiest moment.
+- **Cross-stand comparison needs till counts from Eventium.** Island Canteen
+  sustains 7.2 orders/min and TacoTacoTaco 3.3, but a single-till stand at
+  3.3/min can have a longer line than a four-till stand at 7.2. Normalising
+  every stand against one shared scale would assert a comparison the data does
+  not support. With tills per stand, `rate / tills` makes it defensible.
+- **No wait estimate exists, deliberately.** This account gives no queue depth
+  (POS fulfillments are born COMPLETED) and no prep times (created_at ->
+  closed_at is the card payment, median 2.3s). Never reintroduce a minutes
+  figure derived from heat — that is what the old `Math.round(heat * 15)` was.
+- The simulation is kept for demos and gated on `NODE_ENV` alone. No query
+  flag: anyone could add one to the live URL.
+
 ## Tax rules (do not re-implement)
 
 - **Square prices every cart. This app calculates no tax, ever.** The checkout
