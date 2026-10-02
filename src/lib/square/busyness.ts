@@ -14,6 +14,7 @@
 
 import { isSquareConfigured, squareRequest } from "./client";
 import { getConfiguredStandSlots } from "./config";
+import { tillsFor } from "./tills";
 
 /** Rolling window the live rate is measured over. */
 export const WINDOW_MINUTES = 15;
@@ -37,27 +38,21 @@ export interface BusynessSnapshot {
 }
 
 /**
- * Orders per minute each stand sustains when it is genuinely slammed, set to
- * its observed peak 15-minute rate on a real game night (Sep 26-27, 2026)
- * times 1.15. The headroom means a normal intermission reads high but not
- * pinned, leaving room for a genuinely worse night to read worse.
+ * Orders per minute PER TILL that any stand sustains when genuinely slammed —
+ * one shared number, which is what makes busyness comparable across stands.
  *
- * Seeds only, and derived from one night. Recompute from several game nights
- * once there is history; quiet days must be excluded, because averaging them
- * in would drag the reference down until every game read "Very busy".
+ * Seeded from the highest observed per-till rate on a real game night
+ * (Sep 26-27, 2026) times 1.15. The headroom keeps a normal intermission high
+ * without pinning it, leaving room for a worse night to read worse.
+ *
+ * Derived from one night. Recompute once there are several game nights of
+ * history; quiet days must be excluded, or the reference would sag until every
+ * game read "Very busy".
  */
-const SEED_REFERENCE_RATES: Record<string, number> = {
-  "06KYFX4ZMH3XB": 8.28, // Island Canteen — peak 7.20/min at 18:45 PT
-  LARSXNSYK7Z6G: 4.447, // Island Slice — peak 3.87/min at 19:00 PT
-  L21YPQA79XH0J: 3.833, // TacoTacoTaco — peak 3.33/min at 18:45 PT
-  LZQZQS9G9XF1M: 4.983, // ReMax Fan Deck — peak 4.33/min at 18:45 PT
-};
+const SEED_PER_TILL_REFERENCE = 1.107;
 
-/** Fallback for a stand with no seed and no history yet. */
-const DEFAULT_REFERENCE_RATE = 4;
-
-export function referenceRateFor(locationId: string, learned?: Record<string, number>): number {
-  return learned?.[locationId] ?? SEED_REFERENCE_RATES[locationId] ?? DEFAULT_REFERENCE_RATE;
+export function perTillReference(learned?: number): number {
+  return learned ?? SEED_PER_TILL_REFERENCE;
 }
 
 /**
@@ -72,9 +67,17 @@ export function heatLabel(heat: number): string {
   return "Very busy";
 }
 
-export function heatFromRate(ordersPerMinute: number, referenceRate: number): number {
-  if (referenceRate <= 0) return 0;
-  return Math.max(0, Math.min(1, ordersPerMinute / referenceRate));
+/**
+ * Busyness from order rate and serving capacity.
+ *
+ * Dividing by tills is what lets two stands be compared: Concession 1 takes
+ * nearly double anyone else's orders at intermission but runs the most tills,
+ * so per till it is the LEAST pressed — the opposite of what raw rate says,
+ * and the answer a fan deciding where to walk actually needs.
+ */
+export function heatFromRate(ordersPerMinute: number, tills: number, reference: number): number {
+  if (tills <= 0 || reference <= 0) return 0;
+  return Math.max(0, Math.min(1, ordersPerMinute / tills / reference));
 }
 
 interface SearchOrdersResponse {
@@ -134,7 +137,7 @@ export async function fetchOrderCounts(
  */
 export async function computeBusyness(
   openByLocation: Record<string, boolean>,
-  learnedRates?: Record<string, number>,
+  learnedPerTillReference?: number,
   now: Date = new Date()
 ): Promise<BusynessSnapshot> {
   const slots = getConfiguredStandSlots();
@@ -155,8 +158,11 @@ export async function computeBusyness(
       }
       const perMinute = (counts[locationId] ?? 0) / WINDOW_MINUTES;
       // Rounded to 2dp: enough for a colour, coarse enough that a page view
-      // cannot be read back as an order count.
-      const heat = Math.round(heatFromRate(perMinute, referenceRateFor(locationId, learnedRates)) * 100) / 100;
+      // cannot be read back as an order count or a till count.
+      const heat =
+        Math.round(
+          heatFromRate(perMinute, tillsFor(locationId), perTillReference(learnedPerTillReference)) * 100
+        ) / 100;
       return { locationId, state: "live" as const, heat, label: heatLabel(heat) };
     }),
   };

@@ -10,7 +10,7 @@ function money(cents: number): string {
 const STAGE_COLOR: Record<OrderStage, string> = {
   received: "#94a3b8",
   preparing: "#eab308",
-  ready: "#c5a94e",
+  ready: "var(--accent-ice)",
   completed: "#22c55e",
   canceled: "#ef4444",
 };
@@ -65,7 +65,7 @@ function Steps({ order }: { order: TrackedOrder }) {
               style={{ backgroundColor: done ? STAGE_COLOR[order.stage] : "var(--border-default)" }}
             />
             <span
-              className="text-[10px] font-semibold uppercase tracking-wider"
+              className="an-label text-[10px]"
               style={{ color: done ? "var(--text-primary)" : "var(--text-tertiary)" }}
             >
               {labels[i]}
@@ -91,32 +91,31 @@ export function OrderTrackerSheet({ order, onClose, onDismiss }: OrderTrackerShe
   const ready = order.stage === "ready";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/50" />
-      <div
-        className="relative w-full max-w-md rounded-t-2xl px-5 pt-4 pb-6 max-h-[85vh] overflow-y-auto"
-        style={{ backgroundColor: "var(--panel-bg)", borderTop: "1px solid var(--panel-border)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex justify-center mb-3">
-          <div className="w-10 h-1 rounded-full" style={{ backgroundColor: "var(--border-default)" }} />
-        </div>
-
-        <div className="flex items-start justify-between">
-          <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>
-            {order.standName} · {order.role === "in_seat" ? "Delivery to seat" : "Pickup"}
-          </p>
-          <button onClick={onClose} aria-label="Close" className="text-xl leading-none p-1 -mt-1" style={{ color: "var(--text-tertiary)" }}>&times;</button>
+    <div className="fixed inset-0 z-50">
+      <div className="stand-sheet">
+        <div className="stand-sheet-head">
+          <button type="button" onClick={onClose} className="stand-sheet-back an-tap" aria-label="Back to stands">
+            ‹
+          </button>
+          <div className="stand-sheet-titles">
+            <h2 className="an-display">Your order</h2>
+            <p>
+              {order.standName} · {order.role === "in_seat" ? "Delivered to your seat" : "Pick up at the stand"}
+            </p>
+          </div>
         </div>
 
         <div
-          className="text-center rounded-xl px-4 py-5 mt-2"
-          style={ready ? { backgroundColor: "rgba(197,169,78,0.18)", border: "2px solid var(--accent-gold)" } : undefined}
+          className="text-center rounded-xl px-4 py-5"
+          style={{
+            backgroundColor: ready ? "var(--accent-gold-bg)" : "var(--bg-surface)",
+            border: `${ready ? 2 : 1}px solid ${ready ? "var(--accent-ice)" : "var(--border-default)"}`,
+          }}
           aria-live="polite"
         >
           <p
-            className={ready ? "text-3xl font-extrabold" : "text-xl font-bold"}
-            style={{ color: ready ? "var(--accent-gold)" : order.stage === "canceled" ? STAGE_COLOR.canceled : "var(--text-primary)" }}
+            className={`an-display ${ready ? "text-4xl" : "text-2xl"}`}
+            style={{ color: ready ? "var(--accent-ice)" : order.stage === "canceled" ? STAGE_COLOR.canceled : "var(--text-primary)" }}
           >
             {stageTitle(order)}
           </p>
@@ -144,19 +143,19 @@ export function OrderTrackerSheet({ order, onClose, onDismiss }: OrderTrackerShe
           )}
           {order.receiptUrl && (
             <p className="text-xs mb-3">
-              <a href={order.receiptUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--accent-gold)" }}>
+              <a href={order.receiptUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--accent-ice)" }}>
                 View Square receipt
               </a>
             </p>
           )}
           <p className="text-[10px] mb-4" style={{ color: "var(--text-tertiary)" }}>Order ref: {order.orderId}</p>
           {finished ? (
-            <button onClick={onDismiss} className="py-2 px-4 rounded-lg font-semibold" style={{ backgroundColor: "var(--btn-bg)", color: "var(--btn-text)" }}>
+            <button type="button" onClick={onDismiss} className="an-btn-primary an-tap w-full">
               Done
             </button>
           ) : (
             <>
-              <button onClick={onClose} className="py-2 px-4 rounded-lg font-semibold" style={{ backgroundColor: "var(--btn-bg)", color: "var(--btn-text)" }}>
+              <button type="button" onClick={onClose} className="an-btn-ghost an-tap w-full">
                 Back to stands
               </button>
               <p className="text-[10px] mt-2" style={{ color: "var(--text-tertiary)" }}>
@@ -185,21 +184,21 @@ export function ActiveOrdersBar({ orders, onOpen }: ActiveOrdersBarProps) {
           key={o.orderId}
           type="button"
           onClick={() => onOpen(o.orderId)}
-          className="w-full flex items-center justify-between rounded-lg px-4 py-3 text-left"
+          className="an-tap w-full flex items-center justify-between rounded-xl px-4 py-3 text-left"
           style={{
-            backgroundColor: "var(--bg-elevated)",
-            border: `1px solid ${o.stage === "ready" ? "var(--accent-gold)" : "var(--border-default)"}`,
+            backgroundColor: o.stage === "ready" ? "var(--accent-gold-bg)" : "var(--bg-surface)",
+            border: `${o.stage === "ready" ? 2 : 1}px solid ${o.stage === "ready" ? "var(--accent-ice)" : "var(--border-default)"}`,
           }}
         >
           <span className="flex items-center gap-2 min-w-0">
             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: STAGE_COLOR[o.stage] }} />
             <span className="text-sm truncate" style={{ color: "var(--text-primary)" }}>
-              <span className="font-semibold">Your order</span> · {o.standName}
+              <span className="an-label">Your order</span> · {o.standName}
             </span>
           </span>
           <span
-            className="text-xs font-semibold shrink-0 ml-2"
-            style={{ color: o.stage === "ready" ? "var(--accent-gold)" : "var(--text-secondary)" }}
+            className="an-label text-xs shrink-0 ml-2"
+            style={{ color: o.stage === "ready" ? "var(--accent-ice)" : "var(--text-secondary)" }}
           >
             {stageTitle(o)}
           </span>

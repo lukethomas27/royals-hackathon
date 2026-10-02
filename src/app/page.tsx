@@ -2,13 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import ArenaMap, { MapStand } from "@/components/ArenaMap";
-import ConcessionList from "@/components/ConcessionList";
 import CategoryFilter from "@/components/CategoryFilter";
 import OrderPanel, { SquareClientConfig } from "@/components/OrderPanel";
+import StandCard from "@/components/StandCard";
 import { ActiveOrdersBar, OrderTrackerSheet } from "@/components/OrderTracker";
-import StandPicker from "@/components/StandPicker";
+import { CartLine } from "@/lib/square/tax";
 import BestTimeCard from "@/components/DemandTimeline";
-import ThemeToggle from "@/components/ThemeToggle";
 import {
   SimulationEngine,
   DEFAULT_CONFIG,
@@ -34,7 +33,13 @@ export default function Home() {
   const [speed, setSpeed] = useState<number>(120);
   const [selectedCategory, setSelectedCategory] = useState<FanCategory>("all");
   const [selectedStandId, setSelectedStandId] = useState<string | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  // The cart lives here, not inside OrderPanel, so the sticky bar can show it
+  // from the home screen. An order can only ever go to one Square location, so
+  // there is one cart at a time and it remembers which stand it belongs to.
+  const [cart, setCart] = useState<CartLine[]>([]);
+  const [cartLocationId, setCartLocationId] = useState<string | null>(null);
+  const [pendingStandId, setPendingStandId] = useState<string | null>(null);
+  const standsRef = useRef<HTMLDivElement | null>(null);
   // Live order tracking (replaces SMS): polled here so it keeps running while
   // the fan browses with the tracker sheet closed.
   const trackedOrders = useTrackedOrders();
@@ -86,6 +91,36 @@ export default function Home() {
 
   const selectedStand = stands.find((s) => s.locationId === selectedStandId) ?? null;
   const openStandCount = stands.filter((s) => s.isOpen).length;
+  const cartCount = cart.reduce((n, l) => n + l.quantity, 0);
+  const cartSubtotal = cart.reduce((sum, l) => sum + (l.variation.priceMoney?.amount ?? 0) * l.quantity, 0);
+  const cartStand = stands.find((s) => s.locationId === cartLocationId) ?? null;
+  // Everything shut: a fan should be told once, plainly, rather than left to
+  // infer it from four greyed-out cards. We have no schedule feed, so this
+  // never claims when the next game is.
+  const allClosed = stands.length > 0 && openStandCount === 0;
+
+  // Open stands first; closed ones dim at the bottom.
+  const orderedStands = [...stands].sort((a, b) => {
+    if (a.isOpen !== b.isOpen) return a.isOpen ? -1 : 1;
+    return a.slot - b.slot;
+  });
+
+  /** Opening a different stand while a cart exists has to be a deliberate act. */
+  function openStand(locationId: string) {
+    if (cart.length > 0 && cartLocationId && cartLocationId !== locationId) {
+      setPendingStandId(locationId);
+      return;
+    }
+    setSelectedStandId(locationId);
+  }
+
+  function confirmReplaceCart() {
+    if (!pendingStandId) return;
+    setCart([]);
+    setCartLocationId(null);
+    setSelectedStandId(pendingStandId);
+    setPendingStandId(null);
+  }
   const selectedStandHeat = selectedStand?.heatmapKey ? heatState[selectedStand.heatmapKey] || 0 : 0;
 
   // Compute best/worst times based on selected category or vendor
@@ -233,22 +268,24 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col items-center px-4 py-6 max-w-md mx-auto">
+    <div
+      className="flex flex-col items-center px-4 py-6 max-w-md mx-auto"
+      /* Room for the sticky cart bar so it never sits on the last card. */
+      style={cartCount > 0 && !selectedStandId ? { paddingBottom: "6rem" } : undefined}
+    >
       {/* Header */}
-      <div className="flex items-start justify-between w-full mb-4">
-        <div>
-          <h1 className="text-2xl font-bold mb-0" style={{ color: "var(--accent-gold)" }}>
-            ArenaPulse
-          </h1>
-          <p className="text-xs mb-0.5" style={{ color: "var(--accent-gold-dim)" }}>
-            Victoria Royals
-          </p>
-          <p className="text-sm" style={{ color: "var(--text-tertiary)" }}>
-            Find the shortest line, then order
-          </p>
-        </div>
-        <ThemeToggle />
-      </div>
+      <header className="an-header w-full">
+        <span className="an-wordmark an-label">ArenaPulse</span>
+        <span className="an-venue">Save-On-Foods Memorial Centre · Victoria Royals</span>
+      </header>
+
+      <h1 className="an-headline an-display w-full">
+        Order food
+        <br />
+        without missing
+        <br />
+        the game
+      </h1>
 
       <ActiveOrdersBar orders={trackedOrders} onOpen={setTrackerOrderId} />
 
@@ -256,11 +293,12 @@ export default function Home() {
           directly — this exists because the map alone was not discoverable. */}
       <button
         type="button"
-        onClick={() => setPickerOpen(true)}
-        className="order-cta w-full mb-4"
+        onClick={() => standsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        className="order-cta an-tap w-full mb-4"
         disabled={stands.length === 0}
+        aria-label="Jump to the list of stands"
       >
-        <span className="order-cta-main">Order food</span>
+        <span className="order-cta-main an-display">Order food</span>
         <span className="order-cta-sub">
           {stands.length === 0
             ? "Loading stands…"
@@ -272,25 +310,28 @@ export default function Home() {
 
       <CategoryFilter selected={selectedCategory} onChange={handleCategoryChange} />
 
-      {/* View mode toggle */}
-      <div className="flex w-full rounded-lg overflow-hidden mb-4" style={{ border: "1px solid var(--border-default)" }}>
-        {(["map", "list"] as const).map((mode) => (
-          <button
-            key={mode}
-            onClick={() => setViewMode(mode)}
-            className="flex-1 py-2 text-xs font-semibold uppercase tracking-wider transition-colors"
-            style={{
-              backgroundColor: viewMode === mode ? "var(--btn-active-bg)" : "var(--btn-bg)",
-              color: viewMode === mode ? "var(--btn-active-text)" : "var(--btn-text)",
-            }}
-          >
-            {mode === "map" ? "Map" : "List"}
-          </button>
-        ))}
+      <div ref={standsRef} className="an-section-head w-full">
+        <h2 className="an-display">Stands</h2>
+        {/* The map is secondary now: a fan lands on the cards. */}
+        <button
+          type="button"
+          onClick={() => setViewMode(viewMode === "map" ? "list" : "map")}
+          className="an-ghost-btn an-tap an-label"
+          aria-label={viewMode === "map" ? "Show the stand list" : "Show the arena map"}
+        >
+          {viewMode === "map" ? "List" : "Map"}
+        </button>
       </div>
 
-      {updatedAgoLabel && (
-        <p className="w-full text-[10px] mb-2 text-right" style={{ color: "var(--text-tertiary)" }}>
+      {allClosed && (
+        <div className="an-empty" role="status">
+          <p className="an-empty-title an-display">Stands are closed right now</p>
+          <p className="an-empty-sub">Ordering opens on game day. Browse the menus below.</p>
+        </div>
+      )}
+
+      {!allClosed && updatedAgoLabel && (
+        <p className="w-full text-[10px] mb-2" style={{ color: "var(--text-tertiary)" }}>
           Busyness from sales in the last 15 min · {updatedAgoLabel}
         </p>
       )}
@@ -303,7 +344,7 @@ export default function Home() {
             busyness={busynessByLocation}
             activeLocations={activeLocations}
             bestLocation={bestLocation}
-            onNodeClick={setSelectedStandId}
+            onNodeClick={openStand}
             stats={stats}
             inSeatSection={inSeatSection}
           />
@@ -318,17 +359,24 @@ export default function Home() {
           </div>
         </>
       ) : (
-        <div className="w-full mb-4">
-          <ConcessionList
-            stands={stands}
-            heatState={heatState}
-            busyness={busynessByLocation}
-            activeLocations={activeLocations}
-            bestLocation={bestLocation}
-            onNodeClick={setSelectedStandId}
-            stats={stats}
-            inSeatSection={inSeatSection}
-          />
+        <div className="w-full mb-4 flex flex-col gap-2.5">
+          {orderedStands.length === 0 && (
+            <p className="text-sm py-6 text-center" style={{ color: "var(--text-tertiary)" }}>
+              Loading stands…
+            </p>
+          )}
+          {orderedStands.map((s) => (
+            <StandCard
+              key={s.locationId}
+              stand={s}
+              busyness={busynessByLocation[s.locationId]}
+              sells={s.sells ?? null}
+              inSeatSection={inSeatSection}
+              onOpen={openStand}
+              dim={!allClosed}
+              showMeter={!allClosed}
+            />
+          ))}
         </div>
       )}
 
@@ -414,21 +462,49 @@ export default function Home() {
       )}
 
       {/* Order panel: live menu, cart and checkout for the selected stand */}
-      {pickerOpen && (
-        <StandPicker
-          stands={stands}
-          inSeatSection={inSeatSection}
-          onPick={(locationId) => {
-            setSelectedStandId(locationId);
-            setPickerOpen(false);
-          }}
-          onClose={() => setPickerOpen(false)}
-        />
+      {cartCount > 0 && !selectedStandId && (
+        <div className="cart-bar">
+          <button
+            type="button"
+            className="cart-bar-btn"
+            onClick={() => cartLocationId && setSelectedStandId(cartLocationId)}
+            aria-label={`View cart, ${cartCount} items, ${(cartSubtotal / 100).toFixed(2)} dollars`}
+          >
+            <span>View cart{cartStand ? ` · ${cartStand.fanName ?? cartStand.displayName}` : ""}</span>
+            <span className="flex items-center gap-2">
+              <span className="cart-bar-count">{cartCount}</span>
+              <span>${(cartSubtotal / 100).toFixed(2)}</span>
+            </span>
+          </button>
+        </div>
+      )}
+
+      {pendingStandId && (
+        <div className="an-dialog-backdrop" role="dialog" aria-modal="true" aria-label="Start a new cart?">
+          <div className="an-dialog">
+            <h2 className="an-display">Start a new cart?</h2>
+            <p>
+              Your cart is from {cartStand ? (cartStand.fanName ?? cartStand.displayName) : "another stand"}. An order
+              can only go to one stand, so opening a different one clears it.
+            </p>
+            <div className="an-dialog-actions">
+              <button type="button" className="an-btn-ghost an-tap" onClick={() => setPendingStandId(null)}>
+                Keep my cart
+              </button>
+              <button type="button" className="an-btn-primary an-tap" onClick={confirmReplaceCart}>
+                Clear and switch
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {selectedStand && (
         <OrderPanel
           busyness={busynessByLocation[selectedStand.locationId] ?? null}
+          cart={cart}
+          setCart={setCart}
+          onCartStandChange={setCartLocationId}
           stand={selectedStand}
           heat={selectedStandHeat}
           square={squareConfig}

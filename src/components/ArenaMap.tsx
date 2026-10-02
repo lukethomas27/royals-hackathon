@@ -10,6 +10,10 @@ export interface MapStand {
   displayName: string; // always live from Square — never hardcoded
   /** Fan-facing name. Square's name unless overridden — see square/standNames.ts. */
   fanName?: string;
+  /** Short "what they sell" line from the live menu's reporting categories. */
+  sells?: string | null;
+  /** A photo from this stand's own menu, used on the stand card. */
+  photoUrl?: string | null;
   heatmapKey: string | null;
   isOpen: boolean;
 }

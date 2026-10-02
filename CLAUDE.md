@@ -77,23 +77,37 @@ public/data/games/               # 68 game JSON files + index.json
   orders/min over a rolling 15 min, from `/api/busyness` (one SearchOrders call
   for all four stands per ~45s, cached). Only the four configured location IDs
   are ever queried — the token reaches 62.
-- **It is self-relative per stand.** `heat = rate / that stand's own reference
-  rate`, where the reference is its observed peak 15-min rate on a game night
-  x 1.15. So heat answers "how busy is this stand compared to its own worst",
-  not "which stand has the shortest line".
-- **Consequence to know:** at intermission every stand sits near its own peak,
-  so all four read "Very busy" at once. That is honest — they really are all
-  slammed — but it means the map does not discriminate between stands at the
-  busiest moment.
-- **Cross-stand comparison needs till counts from Eventium.** Island Canteen
-  sustains 7.2 orders/min and TacoTacoTaco 3.3, but a single-till stand at
-  3.3/min can have a longer line than a four-till stand at 7.2. Normalising
-  every stand against one shared scale would assert a comparison the data does
-  not support. With tills per stand, `rate / tills` makes it defensible.
+- **It is comparable across stands, because order rate is divided by tills:**
+
+  ```
+  heat = clamp( (orders/min ÷ tills) ÷ sharedPerTillReference , 0, 1 )
+  ```
+
+  Without that division the map lies by omission. Concession 1 takes nearly
+  double anyone else's orders at intermission but runs the most tills, so per
+  till it is the LEAST pressed stand — the opposite of what raw rate suggests,
+  and the answer a fan deciding where to walk actually needs.
+- **Till counts live in `square/tills.ts` and nowhere else.** They are
+  **Eventium's game-night estimates** (Matt Cooke, Oct 2 2026), stated as
+  ranges — Concession 1: 8-12, Concession 2: 3-6, Concession 3: 3-4, Fan Deck
+  Bar: 3-6 — and we use the midpoint of each. Actual staffing varies game to
+  game. **If Eventium reports the tills they ran for a specific night, that
+  file is the one place to change.**
+- Caveats worth knowing: a range treated as a constant means a stand running
+  fewer tills than its midpoint is busier than we show; and the model assumes a
+  till at one stand serves at a broadly similar pace to a till at another,
+  which a bar and a kitchen window may not.
+- The shared per-till reference is seeded from the highest observed per-till
+  rate on one game night (Sep 26-27, 2026) x 1.15. Recompute once there are
+  several nights of history, excluding quiet days — averaging those in would
+  drag it down until every game read "Very busy".
 - **No wait estimate exists, deliberately.** This account gives no queue depth
   (POS fulfillments are born COMPLETED) and no prep times (created_at ->
   closed_at is the card payment, median 2.3s). Never reintroduce a minutes
   figure derived from heat — that is what the old `Math.round(heat * 15)` was.
+- Order counts and till counts are server-side only and never appear in an API
+  response; heat is rounded to 2dp so a page view cannot be read back as
+  either.
 - The simulation is kept for demos and gated on `NODE_ENV` alone. No query
   flag: anyone could add one to the live URL.
 
