@@ -10,6 +10,12 @@ import { getStandOrderingState, isOrderingOpen } from "@/lib/staffState";
 import { isSquareConfigured, SquareApiError } from "@/lib/square/client";
 
 const PHONE_RE = /^\+?[0-9\s()-]{10,15}$/;
+
+// A name is required so staff have something to call out at handoff.
+// Length-checked only, never pattern-matched: a character allowlist would
+// reject the accents, hyphens and apostrophes that belong in real names.
+// Internal whitespace is collapsed because this string is printed on a ticket.
+const NAME_MIN = 2;
 const NAME_MAX = 40;
 
 interface OrderRequestBody {
@@ -18,7 +24,7 @@ interface OrderRequestBody {
   smsOptIn: boolean;
   lines: CartLineInput[];
   seat?: { section: string; row: string; seat: string } | null;
-  /** Optional pickup name. Falls back to "Fan ····1234". */
+  /** Name called out at handoff. Required. */
   recipientName?: string | null;
   /** Web Payments SDK card token. Required unless a valid promo code zeroes the order. */
   sourceId?: string | null;
@@ -28,6 +34,13 @@ interface OrderRequestBody {
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as OrderRequestBody;
 
+  const recipientName = (body.recipientName ?? "").replace(/\s+/g, " ").trim();
+  if (recipientName.length < NAME_MIN || recipientName.length > NAME_MAX) {
+    return NextResponse.json(
+      { error: `A name for the order is required (${NAME_MIN}-${NAME_MAX} characters).` },
+      { status: 400 }
+    );
+  }
   if (!body.customerPhone || !PHONE_RE.test(body.customerPhone)) {
     return NextResponse.json({ error: "A valid phone number is required." }, { status: 400 });
   }
@@ -92,10 +105,6 @@ export async function POST(req: NextRequest) {
     }
     seat = body.seat;
   }
-
-  const digits = body.customerPhone.replace(/\D/g, "");
-  const recipientName =
-    (body.recipientName ?? "").trim().slice(0, NAME_MAX) || `Fan ····${digits.slice(-4)}`;
 
   let order;
   try {

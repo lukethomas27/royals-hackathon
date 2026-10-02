@@ -375,7 +375,7 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
         body: JSON.stringify({
           locationId: stand.locationId,
           customerPhone: phone,
-          recipientName: name.trim() || null,
+          recipientName: name.trim(),
           smsOptIn,
           lines: cart.map((l) => ({ itemId: l.item.id, variationId: l.variation.id, quantity: l.quantity })),
           seat: stand.role === "in_seat" ? seat : null,
@@ -411,6 +411,7 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
     submitting ||
     !quote ||
     !alcoholCheck.ok ||
+    name.trim().length < 2 ||
     !phone ||
     seatIncomplete ||
     paymentsBroken ||
@@ -639,7 +640,7 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
               </h3>
               <input
                 type="text"
-                placeholder="First name (optional)"
+                placeholder="First name"
                 value={name}
                 maxLength={40}
                 autoComplete="given-name"
@@ -656,6 +657,9 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
                 className="w-full rounded px-3 py-2 text-sm border mb-2"
                 style={inputStyle}
               />
+              <p className="text-[10px] mb-2" style={{ color: "var(--text-tertiary)" }}>
+                Staff call your name at {stand.role === "in_seat" ? "delivery" : "pickup"}. Name and phone are both required.
+              </p>
               <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-tertiary)" }}>
                 <input type="checkbox" checked={smsOptIn} onChange={(e) => setSmsOptIn(e.target.checked)} />
                 Text me when my order is ready. No account needed.
