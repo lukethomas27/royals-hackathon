@@ -6,13 +6,14 @@
  * nothing. Run with:
  *   npx tsx --env-file=.env.local scripts/replay-busyness.ts [YYYY-MM-DD]
  */
-import { heatFromRate, heatLabel, referenceRateFor, WINDOW_MINUTES } from "../src/lib/square/busyness";
+import { heatFromRate, heatLabel, perTillReference, WINDOW_MINUTES } from "../src/lib/square/busyness";
+import { tillsFor } from "../src/lib/square/tills";
 
 const STANDS: Record<string, string> = {
-  "06KYFX4ZMH3XB": "Island Canteen",
-  LARSXNSYK7Z6G: "Island Slice",
-  L21YPQA79XH0J: "TacoTacoTaco",
-  LZQZQS9G9XF1M: "ReMax Fan Deck",
+  "06KYFX4ZMH3XB": "Concession 1",
+  LARSXNSYK7Z6G: "Concession 2",
+  L21YPQA79XH0J: "Concession 3",
+  LZQZQS9G9XF1M: "Fan Deck Bar",
 };
 const IDS = Object.keys(STANDS);
 const TZ = "America/Vancouver";
@@ -86,7 +87,7 @@ async function main() {
     for (const id of IDS) {
       const count = buckets.get(key)![id] ?? 0;
       const perMin = count / WINDOW_MINUTES;
-      const heat = heatFromRate(perMin, referenceRateFor(id));
+      const heat = heatFromRate(perMin, tillsFor(id), perTillReference());
       const bar = "#".repeat(Math.round(heat * 20)).padEnd(20, ".");
       console.log(
         `      ${STANDS[id].padEnd(16)} ${bar} heat ${heat.toFixed(2).padStart(5)}  ${heatLabel(heat)}`
