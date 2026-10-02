@@ -475,7 +475,21 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
                 {catItems.map((item) => {
                   const alcoholic = isAlcoholicItem(item, taxesById);
                   return (
-                    <div key={item.id} className="py-1.5 border-b" style={{ borderColor: "var(--border-subtle)" }}>
+                    <div key={item.id} className="menu-item py-1.5 border-b" style={{ borderColor: "var(--border-subtle)" }}>
+                      {/* Square-hosted photo. Plain <img> on purpose: these are
+                          remote Square CDN URLs and the item list is short, so
+                          next/image's remote-pattern config buys nothing here. */}
+                      {item.imageUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          className="menu-item-image"
+                          src={item.imageUrl}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      )}
+                      <div className="menu-item-body">
                       <div className="flex items-center gap-1.5 mb-1">
                         <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{item.name}</span>
                         {alcoholic && (
@@ -484,6 +498,9 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
                           </span>
                         )}
                       </div>
+                      {item.description && (
+                        <p className="menu-item-description">{item.description}</p>
+                      )}
                       <div className="space-y-1">
                         {item.variations.map((v) => (
                           <div key={v.id} className="flex items-center justify-between">
@@ -508,6 +525,7 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
                             </div>
                           </div>
                         ))}
+                      </div>
                       </div>
                     </div>
                   );

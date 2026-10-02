@@ -48,6 +48,8 @@ export interface SquareCatalogItem {
   id: string;
   name: string;
   description: string | null;
+  /** Square-hosted photo URL, resolved from the item's image_ids. */
+  imageUrl?: string | null;
   categoryId: string | null;
   categoryName: string | null;
   variations: SquareCatalogItemVariation[];
