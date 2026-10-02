@@ -431,7 +431,7 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
 
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{stand.displayName}</h2>
+            <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{stand.fanName ?? stand.displayName}</h2>
             <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>
               {stand.role === "in_seat" ? "Delivery to seat" : "Pickup"}
               {!stand.isOpen && " · Not accepting online orders right now"}
@@ -781,7 +781,7 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
                   : `Total ${money(confirmation.amount.amount)}`}
             </p>
             <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-              {name.trim() ? `${name.trim()}, we` : "We"} have sent your order to {stand.displayName}.
+              {name.trim() ? `${name.trim()}, we` : "We"} have sent your order to {stand.fanName ?? stand.displayName}.
               {stand.role === "in_seat" ? ` It is on its way to section ${seat.section}, row ${seat.row}, seat ${seat.seat}.` : " We will text you when it is ready."}
             </p>
             {confirmation.requiresIdCheck && (

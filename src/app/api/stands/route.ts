@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getStands } from "@/lib/square/locations";
+import { fanStandName } from "@/lib/square/standNames";
 import { getInSeatPhysicalSection } from "@/lib/square/config";
 import { isSquareConfigured } from "@/lib/square/client";
 import { getStandOrderingState, isOrderingOpen } from "@/lib/staffState";
@@ -9,7 +10,14 @@ export async function GET() {
   const withState = await Promise.all(
     stands.map(async (s) => {
       const ordering = await getStandOrderingState(s.locationId);
-      return { ...s, ordering, isOpen: isOrderingOpen(ordering) };
+      // fanName is what the fan UI shows; displayName stays Square's live name
+      // so order data, the payment note and staff views match the register.
+      return {
+        ...s,
+        fanName: fanStandName(s.locationId, s.displayName),
+        ordering,
+        isOpen: isOrderingOpen(ordering),
+      };
     })
   );
   return NextResponse.json({

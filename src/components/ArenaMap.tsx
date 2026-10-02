@@ -7,6 +7,8 @@ export interface MapStand {
   locationId: string;
   role: "pickup" | "in_seat";
   displayName: string; // always live from Square — never hardcoded
+  /** Fan-facing name. Square's name unless overridden — see square/standNames.ts. */
+  fanName?: string;
   heatmapKey: string | null;
   isOpen: boolean;
 }
@@ -381,11 +383,13 @@ export default function ArenaMap({ stands, heatState, activeLocations, bestLocat
             />
 
             <text x={s.x} y={s.y + 1} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize="7" fontWeight="800" fontFamily="'JetBrains Mono', 'SF Mono', ui-monospace, monospace" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}>
-              {s.displayName.length > 12 ? `${s.displayName.slice(0, 11)}…` : s.displayName}
+              {(s.fanName ?? s.displayName).length > 12
+                ? `${(s.fanName ?? s.displayName).slice(0, 11)}…`
+                : (s.fanName ?? s.displayName)}
             </text>
 
             <text x={s.x} y={labelY} textAnchor="middle" fill="var(--arena-section-text)" fontSize="6.5" fontFamily="'JetBrains Mono', 'SF Mono', ui-monospace, monospace" fontWeight="500">
-              {s.displayName}
+              {s.fanName ?? s.displayName}
             </text>
 
             <text x={s.x} y={isTop ? labelY - 9 : labelY + 9} textAnchor="middle" fill="var(--arena-section-text)" fontSize="5.5" opacity="0.6" fontFamily="'JetBrains Mono', 'SF Mono', ui-monospace, monospace">

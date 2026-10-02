@@ -78,7 +78,7 @@ export default function Home() {
     [txVersion, selectedCategory, selectedStandId]
   );
   const bestTimeContext = selectedStand
-    ? selectedStand.displayName
+    ? selectedStand.fanName ?? selectedStand.displayName
     : selectedCategory === "all"
       ? "any concession"
       : selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1);
