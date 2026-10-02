@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SquareCatalogItem, SquareCatalogTax, SquareOrderQuote } from "@/lib/square/types";
-import { isAlcoholicItem, is24ozVariation, validateAlcoholLimits, CartLine } from "@/lib/square/tax";
+import { isAlcoholicItem, validateAlcoholLimits, CartLine } from "@/lib/square/tax";
 import { MapStand } from "./ArenaMap";
 import { StandBusyness } from "@/lib/square/busyness";
+import BusynessMeter from "./BusynessMeter";
+import ItemDetailSheet from "./ItemDetailSheet";
 
 // Display order for live category names (Square reporting categories).
 // Matching is fuzzy on purpose — names are Eventium's and may be renamed.
@@ -84,15 +86,13 @@ interface OrderPanelProps {
   heat: number;
   /** Live busyness for this stand. null while it loads. */
   busyness?: StandBusyness | null;
+  /** The cart lives in the page so the sticky bar can show it. */
+  cart: CartLine[];
+  setCart: React.Dispatch<React.SetStateAction<CartLine[]>>;
+  /** Tells the page which stand the current cart belongs to. */
+  onCartStandChange: (locationId: string | null) => void;
   square: SquareClientConfig | null;
   onClose: () => void;
-}
-
-function heatLabel(heat: number): { text: string; color: string } {
-  if (heat < 0.25) return { text: "Not busy", color: "#22c55e" };
-  if (heat < 0.5) return { text: "Moderate", color: "#eab308" };
-  if (heat < 0.75) return { text: "Busy", color: "#f97316" };
-  return { text: "Very busy", color: "#ef4444" };
 }
 
 function money(cents: number): string {
@@ -122,12 +122,20 @@ const inputStyle = {
   color: "var(--text-primary)",
 } as const;
 
-export default function OrderPanel({ stand, heat, busyness, square, onClose }: OrderPanelProps) {
+export default function OrderPanel({
+  stand,
+  heat,
+  busyness,
+  cart,
+  setCart,
+  onCartStandChange,
+  square,
+  onClose,
+}: OrderPanelProps) {
   const [items, setItems] = useState<SquareCatalogItem[]>([]);
   const [taxesById, setTaxesById] = useState<Record<string, SquareCatalogTax>>({});
   const [menuSource, setMenuSource] = useState<"live" | "mock" | null>(null);
   const [loading, setLoading] = useState(true);
-  const [cart, setCart] = useState<CartLine[]>([]);
   const [phase, setPhase] = useState<Phase>("menu");
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
@@ -187,12 +195,17 @@ export default function OrderPanel({ stand, heat, busyness, square, onClose }: O
         await loadSquareSdk(square.environment);
         if (cancelled || !window.Square) return;
         const payments = window.Square.payments(square.applicationId!, stand.locationId);
+        // Arena Night. Square renders the card field in its own iframe, so it
+        // cannot inherit our CSS — these values mirror the palette by hand.
+        // 16px keeps iOS from zooming the page on focus.
         const card = await payments.card({
           style: {
-            input: { color: "#1a1a1a", fontSize: "16px" },
-            ".input-container": { borderColor: "#c5a94e", borderRadius: "8px" },
-            ".input-container.is-focus": { borderColor: "#c5a94e" },
-            ".message-text": { color: "#6b7280" },
+            input: { color: "#F3F5F8", fontSize: "16px", backgroundColor: "#101B2F" },
+            "input::placeholder": { color: "#A9B4C6" },
+            ".input-container": { borderColor: "#22304D", borderRadius: "10px", backgroundColor: "#101B2F" },
+            ".input-container.is-focus": { borderColor: "#7CC4FF" },
+            ".input-container.is-error": { borderColor: "#ef4444" },
+            ".message-text": { color: "#A9B4C6" },
             ".message-text.is-error": { color: "#ef4444" },
           },
         });
@@ -238,24 +251,32 @@ export default function OrderPanel({ stand, heat, busyness, square, onClose }: O
   // No wait estimate: this account gives no queue depth and no prep times —
   // see src/lib/square/busyness.ts.
   const liveHeat = busyness ? (busyness.state === "live" ? busyness.heat : null) : heat;
-  const status =
-    busyness?.state === "closed"
-      ? { text: "Closed", color: "var(--text-tertiary)" }
-      : liveHeat === null
-        ? { text: "No live data", color: "var(--text-tertiary)" }
-        : heatLabel(liveHeat);
 
-  function addToCart(item: SquareCatalogItem, variationId: string) {
+  function addToCart(item: SquareCatalogItem, variationId: string, qty = 1) {
     const variation = item.variations.find((v) => v.id === variationId);
     if (!variation) return;
+    // The page tracks which stand the cart belongs to; an order can only ever
+    // go to one Square location.
+    onCartStandChange(stand.locationId);
     setCart((prev) => {
       const existing = prev.find((l) => l.variation.id === variationId);
       if (existing) {
-        return prev.map((l) => (l.variation.id === variationId ? { ...l, quantity: l.quantity + 1 } : l));
+        return prev.map((l) =>
+          l.variation.id === variationId ? { ...l, quantity: Math.min(20, l.quantity + qty) } : l
+        );
       }
-      return [...prev, { item, variation, quantity: 1 }];
+      return [...prev, { item, variation, quantity: Math.min(20, qty) }];
     });
   }
+
+  const categoryNames = Array.from(grouped.keys());
+  const [menuCategory, setMenuCategory] = useState<string | null>(null);
+
+  /** Stand must be open before anything can be added. */
+  const canOrder = stand.isOpen;
+
+  /** Item tapped for its detail sheet (the + button adds directly instead). */
+  const [detailItem, setDetailItem] = useState<SquareCatalogItem | null>(null);
 
   function changeQty(variationId: string, delta: number) {
     setCart((prev) =>
@@ -404,6 +425,10 @@ export default function OrderPanel({ stand, heat, busyness, square, onClose }: O
         cardLast4: data.cardLast4 ?? null,
         requiresIdCheck: Boolean(data.requiresIdCheck),
       });
+      // The cart lives in the page now, so a completed order has to clear it
+      // explicitly — unmounting the panel no longer throws it away.
+      setCart([]);
+      onCartStandChange(null);
       setPhase("confirmation");
     } catch {
       setError("Could not reach the order system. Try again.");
@@ -424,27 +449,38 @@ export default function OrderPanel({ stand, heat, busyness, square, onClose }: O
     paymentsBroken ||
     (needsCard && (!cardReady || Boolean(cardError)));
 
+  if (detailItem) {
+    return (
+      <ItemDetailSheet
+        item={detailItem}
+        taxesById={taxesById}
+        canOrder={canOrder}
+        onAdd={(variationId, qty) => addToCart(detailItem, variationId, qty)}
+        onClose={() => setDetailItem(null)}
+      />
+    );
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/50" />
+    <div className="fixed inset-0 z-50" onClick={onClose}>
       <div
-        className="relative w-full max-w-md rounded-t-2xl px-5 pt-4 pb-6 max-h-[85vh] overflow-y-auto"
-        style={{ backgroundColor: "var(--panel-bg)", borderTop: "1px solid var(--panel-border)" }}
+        className="stand-sheet"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-center mb-3">
-          <div className="w-10 h-1 rounded-full" style={{ backgroundColor: "var(--border-default)" }} />
-        </div>
-
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{stand.fanName ?? stand.displayName}</h2>
-            <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>
-              {stand.role === "in_seat" ? "Delivery to seat" : "Pickup"}
-              {!stand.isOpen && " · Not accepting online orders right now"}
-            </p>
+        <div className="stand-sheet-head">
+          <button
+            type="button"
+            onClick={onClose}
+            className="stand-sheet-back an-tap"
+            aria-label="Back to stands"
+          >
+            ‹
+          </button>
+          <div className="stand-sheet-titles">
+            <h2 className="an-display">{stand.fanName ?? stand.displayName}</h2>
+            <p>{stand.role === "in_seat" ? "Delivered to your seat" : "Pick up at the stand"}</p>
           </div>
-          <button onClick={onClose} className="text-xl leading-none p-1" style={{ color: "var(--text-tertiary)" }}>&times;</button>
+          <BusynessMeter busyness={busyness} />
         </div>
 
         {!stand.isOpen && (
@@ -455,15 +491,9 @@ export default function OrderPanel({ stand, heat, busyness, square, onClose }: O
 
         {phase === "menu" && (
           <>
-            <div className="flex items-center justify-between rounded-lg px-4 py-3 mb-4" style={{ backgroundColor: "var(--bg-elevated)" }}>
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: status.color }} />
-                <span className="text-sm font-semibold" style={{ color: status.color }}>{status.text}</span>
-              </div>
-              <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
-                {liveHeat === null ? "" : "based on sales in the last 15 min"}
-              </span>
-            </div>
+            {liveHeat !== null && (
+              <p className="menu-busy-note">based on sales in the last 15 min</p>
+            )}
 
             {menuSource === "mock" && (
               <div className="text-[10px] mb-3 px-2 py-1 rounded inline-block" style={{ backgroundColor: "var(--heat-bar-bg)", color: "var(--text-tertiary)" }}>
@@ -471,74 +501,85 @@ export default function OrderPanel({ stand, heat, busyness, square, onClose }: O
               </div>
             )}
 
-            <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--text-secondary)" }}>Menu</h3>
+            {/* Category chips — the same categories the grid groups by. */}
+            {categoryNames.length > 1 && (
+              <div className="menu-chips" role="group" aria-label="Filter by category">
+                <button
+                  type="button"
+                  className={`menu-chip an-tap an-label ${menuCategory === null ? "is-active" : ""}`}
+                  onClick={() => setMenuCategory(null)}
+                  aria-pressed={menuCategory === null}
+                >
+                  All
+                </button>
+                {categoryNames.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`menu-chip an-tap an-label ${menuCategory === c ? "is-active" : ""}`}
+                    onClick={() => setMenuCategory(c)}
+                    aria-pressed={menuCategory === c}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {loading && <p className="text-sm" style={{ color: "var(--text-tertiary)" }}>Loading menu…</p>}
             {!loading && items.length === 0 && (
               <p className="text-sm" style={{ color: "var(--text-tertiary)" }}>Nothing orderable here right now.</p>
             )}
 
-            {Array.from(grouped.entries()).map(([cat, catItems]) => (
-              <div key={cat} className="mb-4">
-                <p className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--text-tertiary)" }}>{cat}</p>
-                {catItems.map((item) => {
-                  const alcoholic = isAlcoholicItem(item, taxesById);
-                  return (
-                    <div key={item.id} className="menu-item py-1.5 border-b" style={{ borderColor: "var(--border-subtle)" }}>
-                      {/* Square-hosted photo. Plain <img> on purpose: these are
-                          remote Square CDN URLs and the item list is short, so
-                          next/image's remote-pattern config buys nothing here. */}
-                      {item.imageUrl && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          className="menu-item-image"
-                          src={item.imageUrl}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      )}
-                      <div className="menu-item-body">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{item.name}</span>
-                        {alcoholic && (
-                          <span className="text-[9px] font-bold px-1 py-0.5 rounded" style={{ backgroundColor: "var(--heat-bar-bg)", color: "var(--text-tertiary)" }}>
-                            19+ · ID CHECKED
-                          </span>
-                        )}
-                      </div>
-                      {item.description && (
-                        <p className="menu-item-description">{item.description}</p>
-                      )}
-                      <div className="space-y-1">
-                        {item.variations.map((v) => (
-                          <div key={v.id} className="flex items-center justify-between">
-                            <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                              {/* Some live variations have an empty name (e.g. Chicken Tenders) */}
-                              {v.name.trim() || item.name}
-                              {is24ozVariation(v) && " (limit 1)"}
+            {Array.from(grouped.entries())
+              .filter(([cat]) => menuCategory === null || cat === menuCategory)
+              .map(([cat, catItems]) => (
+              <div key={cat} className="mb-5">
+                <p className="menu-cat an-label">{cat}</p>
+                <div className="menu-grid">
+                  {catItems.map((item) => {
+                    const alcoholic = isAlcoholicItem(item, taxesById);
+                    const first = item.variations.find((v) => !v.soldOut) ?? item.variations[0];
+                    const price = first?.priceMoney?.amount ?? 0;
+                    const soldOut = item.variations.every((v) => v.soldOut);
+                    return (
+                      <div key={item.id} className="menu-tile">
+                        {/* Tapping the tile opens the detail sheet; the + adds
+                            one straight to the cart without the detour. */}
+                        <button
+                          type="button"
+                          className="menu-tile-main"
+                          onClick={() => setDetailItem(item)}
+                          aria-label={`${item.name}, ${price ? money(price) : "price unavailable"}. View details`}
+                        >
+                          {item.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img className="menu-tile-photo" src={item.imageUrl} alt="" loading="lazy" decoding="async" />
+                          ) : (
+                            <span className="menu-tile-photo is-placeholder" aria-hidden="true">
+                              <span className="an-display">{item.name.charAt(0)}</span>
                             </span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
-                                {v.priceMoney ? money(v.priceMoney.amount) : "—"}
-                              </span>
-                              <button
-                                type="button"
-                                disabled={!stand.isOpen}
-                                onClick={() => addToCart(item, v.id)}
-                                className="btn-add text-xs font-semibold px-2.5 py-1 rounded"
-                                aria-label={`Add ${item.name} ${v.name.trim() || item.name}`}
-                              >
-                                Add
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                          )}
+                          <span className="menu-tile-name">{item.name}</span>
+                          {item.description && <span className="menu-tile-desc">{item.description}</span>}
+                          <span className="menu-tile-foot">
+                            <span className="menu-tile-price an-price">{price ? money(price) : "—"}</span>
+                            {alcoholic && <span className="menu-tile-19 an-label">19+</span>}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="menu-tile-add an-tap"
+                          disabled={!canOrder || soldOut || !first}
+                          onClick={() => first && addToCart(item, first.id)}
+                          aria-label={`Add ${item.name} to cart`}
+                        >
+                          +
+                        </button>
                       </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             ))}
 
@@ -725,10 +766,10 @@ export default function OrderPanel({ stand, heat, busyness, square, onClose }: O
             {needsCard && (
               <div>
                 <h3 className="text-sm font-semibold mb-2" style={{ color: "var(--text-secondary)" }}>Card</h3>
-                <div className="rounded-lg p-3" style={{ backgroundColor: "#ffffff" }}>
+                <div className="card-shell">
                   <div id="sq-card-container" />
                   {!cardReady && !cardError && (
-                    <p className="text-xs" style={{ color: "#6b7280" }}>Loading secure card form…</p>
+                    <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Loading secure card form…</p>
                   )}
                 </div>
                 {cardError && <p className="text-xs mt-1" style={{ color: "#ef4444" }}>{cardError}</p>}

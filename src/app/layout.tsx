@@ -1,20 +1,26 @@
 import type { Metadata } from "next";
+import { Barlow, Barlow_Condensed } from "next/font/google";
 import "./globals.css";
+
+// Arena Night: condensed uppercase for headings, stand names and prices;
+// regular Barlow for body copy.
+const barlow = Barlow({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-body",
+  display: "swap",
+});
+const barlowCondensed = Barlow_Condensed({
+  subsets: ["latin"],
+  weight: ["700", "800"],
+  variable: "--font-display",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "ArenaPulse - Victoria Royals",
   description: "Find the shortest concession line",
 };
-
-// Inline script to prevent flash of wrong theme on load
-const themeScript = `
-(function(){
-  var t = localStorage.getItem('theme');
-  if (t === 'light' || t === 'dark') {
-    document.documentElement.setAttribute('data-theme', t);
-  }
-})();
-`;
 
 /**
  * Local dev points at whatever SQUARE_ACCESS_TOKEN is in .env.local, and that
@@ -37,10 +43,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-      </head>
+    <html lang="en" className={`${barlow.variable} ${barlowCondensed.variable}`} suppressHydrationWarning>
       <body>
         {liveSquareInDev() && (
           <div className="live-square-banner" role="alert">
@@ -48,6 +51,11 @@ export default function RootLayout({
             <span>Production credentials. Any order placed here is a real order at a real stand.</span>
           </div>
         )}
+        {/* Royals background. Matt's artwork, held under an opaque navy wash
+            measured at 0.82 so every text colour clears 4.5:1 even over the
+            image's brightest pixel (#00A5E3). Never used behind item photos. */}
+        <div className="arena-bg" aria-hidden="true" />
+        <div className="arena-bg-wash" aria-hidden="true" />
         <main className="min-h-screen">{children}</main>
       </body>
     </html>
