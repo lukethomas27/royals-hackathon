@@ -362,3 +362,49 @@ body {
   color: var(--text-tertiary);
   margin-bottom: 0.375rem;
 }
+
+/* "Order food" — the primary way into the menu. The arena map still works,
+   but a map dot is not a discoverable call to action. */
+.order-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.875rem 1rem;
+  border-radius: 0.75rem;
+  background-color: var(--accent-gold);
+  color: var(--text-inverted);
+  text-align: center;
+  border: none;
+  cursor: pointer;
+}
+.order-cta:disabled { opacity: 0.55; cursor: default; }
+.order-cta-main { font-size: 1rem; font-weight: 700; letter-spacing: 0.01em; }
+.order-cta-sub { font-size: 0.6875rem; opacity: 0.85; }
+
+/* One stand in the "Where are you ordering from?" sheet. */
+.stand-pick {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem 0.875rem;
+  border-radius: 0.625rem;
+  border: 1px solid var(--border-default);
+  background-color: var(--bg-input);
+  text-align: left;
+  cursor: pointer;
+}
+.stand-pick-copy { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; }
+.stand-pick-copy strong { font-size: 0.9375rem; font-weight: 650; color: var(--text-primary); }
+.stand-pick-copy small { font-size: 0.6875rem; color: var(--text-tertiary); }
+.stand-pick-state {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+}
+.stand-pick-open { color: #16a34a; font-weight: 700; }
+.stand-pick-closed { color: var(--text-tertiary); font-weight: 600; }

@@ -5,6 +5,7 @@ import ArenaMap, { MapStand } from "@/components/ArenaMap";
 import ConcessionList from "@/components/ConcessionList";
 import CategoryFilter from "@/components/CategoryFilter";
 import OrderPanel, { SquareClientConfig } from "@/components/OrderPanel";
+import StandPicker from "@/components/StandPicker";
 import BestTimeCard from "@/components/DemandTimeline";
 import ThemeToggle from "@/components/ThemeToggle";
 import {
@@ -30,6 +31,7 @@ export default function Home() {
   const [speed, setSpeed] = useState<number>(120);
   const [selectedCategory, setSelectedCategory] = useState<FanCategory>("all");
   const [selectedStandId, setSelectedStandId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [txVersion, setTxVersion] = useState(0);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const engineRef = useRef<SimulationEngine | null>(null);
@@ -65,6 +67,7 @@ export default function Home() {
   }, [heatState, selectedCategory, activeLocations]);
 
   const selectedStand = stands.find((s) => s.locationId === selectedStandId) ?? null;
+  const openStandCount = stands.filter((s) => s.isOpen).length;
   const selectedStandHeat = selectedStand?.heatmapKey ? heatState[selectedStand.heatmapKey] || 0 : 0;
 
   // Compute best/worst times based on selected category or vendor
@@ -186,6 +189,24 @@ export default function Home() {
         </div>
         <ThemeToggle />
       </div>
+
+      {/* The obvious way in. Tapping a stand on the map still opens its menu
+          directly — this exists because the map alone was not discoverable. */}
+      <button
+        type="button"
+        onClick={() => setPickerOpen(true)}
+        className="order-cta w-full mb-4"
+        disabled={stands.length === 0}
+      >
+        <span className="order-cta-main">Order food</span>
+        <span className="order-cta-sub">
+          {stands.length === 0
+            ? "Loading stands…"
+            : openStandCount > 0
+              ? `${openStandCount} of ${stands.length} stands open now`
+              : "See the menus — stands open on game day"}
+        </span>
+      </button>
 
       <CategoryFilter selected={selectedCategory} onChange={handleCategoryChange} />
 
@@ -321,6 +342,18 @@ export default function Home() {
       </div>
 
       {/* Order panel: live menu, cart and checkout for the selected stand */}
+      {pickerOpen && (
+        <StandPicker
+          stands={stands}
+          inSeatSection={inSeatSection}
+          onPick={(locationId) => {
+            setSelectedStandId(locationId);
+            setPickerOpen(false);
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+
       {selectedStand && (
         <OrderPanel
           stand={selectedStand}
