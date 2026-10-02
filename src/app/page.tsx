@@ -33,7 +33,11 @@ export default function Home() {
   const [selectedStandId, setSelectedStandId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [txVersion, setTxVersion] = useState(0);
-  const [viewMode, setViewMode] = useState<"map" | "list">("map");
+  // List is the default: a fan opening this at a game wants to see which
+  // stands are open and what the lines look like, not an arena diagram. The
+  // map is one tap away on the toggle below. (No persistence today — a
+  // returning visitor also lands on List.)
+  const [viewMode, setViewMode] = useState<"map" | "list">("list");
   const engineRef = useRef<SimulationEngine | null>(null);
   const gameTransactions = useRef<Transaction[]>([]);
 

@@ -39,6 +39,11 @@ function heatToColor(heat: number): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
+/** Same model the menu panel uses, so the list and the menu agree. */
+function estimateWaitMinutes(heat: number): number {
+  return Math.round(heat * 15);
+}
+
 function heatLabel(heat: number): string {
   if (heat < 0.15) return "Quiet";
   if (heat < 0.35) return "Low";
@@ -56,10 +61,13 @@ export default function ConcessionList({
   stats,
   inSeatSection = "108",
 }: ConcessionListProps) {
-  // Stable order: best location pinned to top, rest in slot order
+  // Open stands first — a closed stand is not an option right now, however
+  // quiet it is. Within each group: best location pinned, then slot order.
   const sorted = [...stands].sort((a, b) => {
-    if (a.heatmapKey && bestLocation === a.heatmapKey) return -1;
-    if (b.heatmapKey && bestLocation === b.heatmapKey) return 1;
+    if (a.isOpen !== b.isOpen) return a.isOpen ? -1 : 1;
+    const aBest = a.heatmapKey !== null && bestLocation === a.heatmapKey;
+    const bBest = b.heatmapKey !== null && bestLocation === b.heatmapKey;
+    if (aBest !== bBest) return aBest ? -1 : 1;
     return a.slot - b.slot;
   });
 
@@ -71,7 +79,9 @@ export default function ConcessionList({
         const isDimmed = activeLocations !== null && s.heatmapKey !== null && !activeLocations.has(s.heatmapKey);
         const isBest = s.heatmapKey !== null && bestLocation === s.heatmapKey;
         const txCount = (s.heatmapKey && stats?.perLocation[s.heatmapKey]?.transactionCount) || 0;
-        const badge = s.role === "in_seat" ? `Section ${inSeatSection}` : "Pickup";
+        const badge =
+          s.role === "in_seat" ? `Delivered to your seat · section ${inSeatSection} area` : "Pick up at the stand";
+        const waitMin = estimateWaitMinutes(heat);
 
         return (
           <button
@@ -95,7 +105,7 @@ export default function ConcessionList({
             {/* Info */}
             <div className="flex-1 text-left min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>
+                <span className="text-sm font-bold truncate" style={{ color: "var(--text-primary)" }}>
                   {s.fanName ?? s.displayName}
                 </span>
                 {isBest && (
@@ -106,16 +116,18 @@ export default function ConcessionList({
                     BEST
                   </span>
                 )}
-                {!s.isOpen && (
-                  <span
-                    className="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                    style={{ backgroundColor: "var(--heat-bar-bg)", color: "var(--text-tertiary)" }}
-                  >
-                    CLOSED
-                  </span>
-                )}
+                <span
+                  className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0"
+                  style={
+                    s.isOpen
+                      ? { backgroundColor: "rgba(22,163,74,0.12)", color: "#16a34a" }
+                      : { backgroundColor: "var(--heat-bar-bg)", color: "var(--text-tertiary)" }
+                  }
+                >
+                  {s.isOpen ? "OPEN" : "CLOSED"}
+                </span>
               </div>
-              <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+              <span className="text-xs block truncate" style={{ color: "var(--text-tertiary)" }}>
                 {badge}
               </span>
             </div>
@@ -125,15 +137,14 @@ export default function ConcessionList({
               <div className="text-xs font-semibold" style={{ color }}>
                 {heatLabel(heat)}
               </div>
-              {txCount > 0 && (
-                <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
-                  {txCount >= 1000 ? `${(txCount / 1000).toFixed(1)}k` : txCount} txns
-                </div>
-              )}
+              <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+                {heat > 0 ? `~${waitMin} min` : txCount > 0 ? `${txCount} txns` : "no wait data"}
+              </div>
             </div>
 
-            {/* Heat bar */}
-            <div className="w-16 shrink-0">
+            {/* Heat bar — hidden on the narrowest phones, where the label and
+                the colour stripe already carry the same information. */}
+            <div className="hidden min-[360px]:block w-12 sm:w-16 shrink-0">
               <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: "var(--heat-bar-bg)" }}>
                 <div
                   className="h-full rounded-full"
