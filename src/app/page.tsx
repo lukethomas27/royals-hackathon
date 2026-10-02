@@ -87,6 +87,10 @@ export default function Home() {
   const cartCount = cart.reduce((n, l) => n + l.quantity, 0);
   const cartSubtotal = cart.reduce((sum, l) => sum + (l.variation.priceMoney?.amount ?? 0) * l.quantity, 0);
   const cartStand = stands.find((s) => s.locationId === cartLocationId) ?? null;
+  // Everything shut: a fan should be told once, plainly, rather than left to
+  // infer it from four greyed-out cards. We have no schedule feed, so this
+  // never claims when the next game is.
+  const allClosed = stands.length > 0 && openStandCount === 0;
 
   // Open stands first; closed ones dim at the bottom.
   const orderedStands = [...stands].sort((a, b) => {
@@ -310,7 +314,14 @@ export default function Home() {
         </button>
       </div>
 
-      {updatedAgoLabel && (
+      {allClosed && (
+        <div className="an-empty" role="status">
+          <p className="an-empty-title an-display">Stands are closed right now</p>
+          <p className="an-empty-sub">Ordering opens on game day. Browse the menus below.</p>
+        </div>
+      )}
+
+      {!allClosed && updatedAgoLabel && (
         <p className="w-full text-[10px] mb-2" style={{ color: "var(--text-tertiary)" }}>
           Busyness from sales in the last 15 min · {updatedAgoLabel}
         </p>
@@ -353,6 +364,8 @@ export default function Home() {
               sells={s.sells ?? null}
               inSeatSection={inSeatSection}
               onOpen={openStand}
+              dim={!allClosed}
+              showMeter={!allClosed}
             />
           ))}
         </div>

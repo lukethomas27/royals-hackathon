@@ -15,12 +15,18 @@ export default function StandCard({
   sells,
   inSeatSection,
   onOpen,
+  dim = true,
+  showMeter = true,
 }: {
   stand: MapStand;
   busyness: StandBusyness | null | undefined;
   sells: string | null;
   inSeatSection: string;
   onOpen: (locationId: string) => void;
+  /** Dim a closed stand only when there is an open one to contrast it with. */
+  dim?: boolean;
+  /** Hidden when nothing is open — there is no busyness to report. */
+  showMeter?: boolean;
 }) {
   const name = stand.fanName ?? stand.displayName;
   const fulfillment =
@@ -30,7 +36,7 @@ export default function StandCard({
     <button
       type="button"
       onClick={() => onOpen(stand.locationId)}
-      className={`stand-card an-tap ${stand.isOpen ? "" : "is-closed"}`}
+      className={`stand-card an-tap ${!stand.isOpen && dim ? "is-closed" : ""}`}
       aria-label={`${name}. ${fulfillment}. ${stand.isOpen ? "Open" : "Closed"}. View menu`}
     >
       {stand.photoUrl ? (
@@ -48,9 +54,11 @@ export default function StandCard({
         </span>
         {sells && <span className="stand-card-sells">{sells}</span>}
         <span className="stand-card-fulfil">{fulfillment}</span>
-        <span className="stand-card-meter">
-          <BusynessMeter busyness={busyness} />
-        </span>
+        {showMeter && (
+          <span className="stand-card-meter">
+            <BusynessMeter busyness={busyness} />
+          </span>
+        )}
       </span>
       <span className="stand-card-go" aria-hidden="true">›</span>
     </button>

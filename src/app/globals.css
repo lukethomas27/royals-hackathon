@@ -608,3 +608,15 @@ body {
   background-color: var(--bg-input);
   border: 1px solid var(--border-default);
 }
+
+/* ── All stands closed ── */
+.an-empty {
+  width: 100%;
+  margin-bottom: 0.875rem;
+  padding: 0.875rem 1rem;
+  border-radius: 0.75rem;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-default);
+}
+.an-empty-title { font-size: 1.0625rem; color: var(--text-primary); margin-bottom: 0.1875rem; }
+.an-empty-sub { font-size: 0.75rem; color: var(--text-secondary); }
