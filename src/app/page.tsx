@@ -5,6 +5,7 @@ import ArenaMap, { MapStand } from "@/components/ArenaMap";
 import ConcessionList from "@/components/ConcessionList";
 import CategoryFilter from "@/components/CategoryFilter";
 import OrderPanel, { SquareClientConfig } from "@/components/OrderPanel";
+import { ActiveOrdersBar, OrderTrackerSheet } from "@/components/OrderTracker";
 import StandPicker from "@/components/StandPicker";
 import BestTimeCard from "@/components/DemandTimeline";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -17,6 +18,7 @@ import { GameData, GameIndex, HeatState, SimulationStats, Transaction } from "@/
 import { BusynessSnapshot, StandBusyness, MAX_AGE_MS } from "@/lib/square/busyness";
 import { FanCategory, getDataCategories, getActiveLocations } from "@/lib/categories";
 import { findBestTimes } from "@/lib/demandTimeline";
+import { addTrackedOrder, dismissTrackedOrder, useTrackedOrders } from "@/lib/trackedOrders";
 
 export default function Home() {
   const [stands, setStands] = useState<MapStand[]>([]);
@@ -33,6 +35,11 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState<FanCategory>("all");
   const [selectedStandId, setSelectedStandId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Live order tracking (replaces SMS): polled here so it keeps running while
+  // the fan browses with the tracker sheet closed.
+  const trackedOrders = useTrackedOrders();
+  const [trackerOrderId, setTrackerOrderId] = useState<string | null>(null);
+  const trackerOrder = trackedOrders.find((o) => o.orderId === trackerOrderId) ?? null;
   const [txVersion, setTxVersion] = useState(0);
   // List is the default: a fan opening this at a game wants to see which
   // stands are open and what the lines look like, not an arena diagram. The
@@ -243,6 +250,8 @@ export default function Home() {
         <ThemeToggle />
       </div>
 
+      <ActiveOrdersBar orders={trackedOrders} onOpen={setTrackerOrderId} />
+
       {/* The obvious way in. Tapping a stand on the map still opens its menu
           directly — this exists because the map alone was not discoverable. */}
       <button
@@ -424,6 +433,22 @@ export default function Home() {
           heat={selectedStandHeat}
           square={squareConfig}
           onClose={() => setSelectedStandId(null)}
+          onOrderPlaced={(order) => {
+            addTrackedOrder(order);
+            setSelectedStandId(null);
+            setTrackerOrderId(order.orderId);
+          }}
+        />
+      )}
+
+      {trackerOrder && (
+        <OrderTrackerSheet
+          order={trackerOrder}
+          onClose={() => setTrackerOrderId(null)}
+          onDismiss={() => {
+            dismissTrackedOrder(trackerOrder.orderId);
+            setTrackerOrderId(null);
+          }}
         />
       )}
     </div>
