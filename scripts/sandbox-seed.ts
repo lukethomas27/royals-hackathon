@@ -155,7 +155,10 @@ async function main() {
   set("SQUARE_STAND_SLOT_1_LOCATION_ID", pickup.id);
   set("SQUARE_STAND_SLOT_4_LOCATION_ID", fandeck.id);
   set("SQUARE_INSEAT_SLOT", "4");
-  if (!/^ORDER_PROMO_CODE=/m.test(text)) set("ORDER_PROMO_CODE", "ROYALS-TEST-0918");
+  // Never bake a promo code into the repo: anyone with it eats free wherever
+  // it is set. Pass one in for a sandbox run, or leave it unset.
+  const seedPromo = process.env.ORDER_PROMO_CODE?.trim();
+  if (seedPromo && !/^ORDER_PROMO_CODE=/m.test(text)) set("ORDER_PROMO_CODE", seedPromo);
   writeFileSync(ENV_FILE, text);
   console.log(`wrote slot IDs into ${ENV_FILE}. Next: npm run dev:sandbox (port 3001)`);
 }
