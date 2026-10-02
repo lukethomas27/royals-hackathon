@@ -67,6 +67,26 @@ public/data/games/               # 68 game JSON files + index.json
 
 **Menu/ordering:** fan picks a stand → `/api/menu?locationId=` reads live from Square → cart → checkout tokenizes the card with Square's Web Payments SDK (or applies the promo code) → `/api/orders` re-validates everything server-side (price, availability, alcohol limits, ordering-open state, seat) → creates a Square order against that stand's location ID → pays it (CreatePayment, or PayOrder with no payments when the total is $0). Square only shows an order to staff once it is paid.
 
+## Tax rules (do not re-implement)
+
+- **Square prices every cart. This app calculates no tax, ever.** The checkout
+  total comes from `POST /v2/orders/calculate` (`/api/quote`) and the created
+  order from `POST /v2/orders` — both built by the same `buildOrderPayload()`
+  in `square/orders.ts`, so a quoted total and the amount charged cannot drift.
+- **Always send `pricing_options: { auto_apply_taxes: true }`.** Square does
+  *not* apply catalog taxes to Orders-API orders by default: without it an
+  order built from `catalog_object_id`s comes back with `tax 0` and an empty
+  `taxes[]`, and the stand collects no GST/PST/Liquor Tax. Verified safe with
+  the 100% promo discount — the order total still comes out $0.00.
+- **Never send `order.taxes` alongside it.** Square applies both sets and the
+  fan is taxed twice.
+- **Catalog IDs only — never ad-hoc line items.** Under `auto_apply_taxes`,
+  Square taxes an ad-hoc amount with every `CatalogTax` flagged
+  `applies_to_custom_amounts`, which on this account is PST + GST + Liquor Tax
+  on everything, snacks included. `square/cart.ts` rejects such lines with a 400.
+- A failed `calculate` must **block the order**, not fall back to a local
+  estimate. There is deliberately no local estimate left to fall back to.
+
 ## Key Patterns
 
 - `SimulationEngine` stored in `useRef` — not React state. Must call `stop()` to cleanup `requestAnimationFrame`

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { SquareCatalogItem, SquareCatalogTax } from "@/lib/square/types";
-import { isAlcoholicItem, is24ozVariation, validateAlcoholLimits, CartLine, estimateLineTax } from "@/lib/square/tax";
+import { SquareCatalogItem, SquareCatalogTax, SquareOrderQuote } from "@/lib/square/types";
+import { isAlcoholicItem, is24ozVariation, validateAlcoholLimits, CartLine } from "@/lib/square/tax";
 import { MapStand } from "./ArenaMap";
 
 // Display order for live category names (Square reporting categories).
@@ -145,6 +145,11 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
   // Card entry (Square Web Payments SDK)
   const cardRef = useRef<SquareCard | null>(null);
   const [cardReady, setCardReady] = useState(false);
+  // The quote is stored with the cart key it was priced for, so a stale total
+  // can never sit next to a changed cart — and so the effect below never has
+  // to call setState synchronously in its body.
+  const [quoteState, setQuoteState] = useState<{ key: string; quote: SquareOrderQuote | null; error: string | null } | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
   const [cardError, setCardError] = useState<string | null>(null);
 
   // Payments are possible when the server has a token AND an app ID. With no
@@ -255,19 +260,55 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
 
   const alcoholCheck = validateAlcoholLimits(cart, taxesById);
 
-  const totals = useMemo(() => {
-    let subtotal = 0;
-    let tax = 0;
-    for (const line of cart) {
-      const lineSubtotal = (line.variation.priceMoney?.amount ?? 0) * line.quantity;
-      subtotal += lineSubtotal;
-      tax += estimateLineTax(line.item, lineSubtotal, taxesById).totalTaxCents;
-    }
-    if (promoApplied) return { subtotal, discount: subtotal, tax: 0, total: 0 };
-    return { subtotal, discount: 0, tax, total: subtotal + tax };
-  }, [cart, taxesById, promoApplied]);
+  // The running figure in the menu is a sum of Square's own prices. No tax is
+  // calculated anywhere in this app — the checkout total comes from Square.
+  const subtotal = useMemo(
+    () => cart.reduce((sum, l) => sum + (l.variation.priceMoney?.amount ?? 0) * l.quantity, 0),
+    [cart]
+  );
 
   const cartCount = cart.reduce((n, l) => n + l.quantity, 0);
+  const cartKey = cart.map((l) => `${l.variation.id}x${l.quantity}`).join(",");
+  const quoteKey = `${cartKey}|${promoApplied ?? ""}#${retryNonce}`;
+  const quoteCurrent = quoteState?.key === quoteKey ? quoteState : null;
+  const quote = quoteCurrent?.quote ?? null;
+  const quoteError = quoteCurrent?.error ?? null;
+  const quoteLoading = phase === "checkout" && cart.length > 0 && !quoteCurrent;
+
+  // Price the cart with Square once the fan reaches checkout, and again only
+  // if the cart or the promo changes while they are on that step.
+  useEffect(() => {
+    if (phase !== "checkout" || cart.length === 0) return;
+    const key = quoteKey;
+    let cancelled = false;
+    fetch("/api/quote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        locationId: stand.locationId,
+        promoCode: promoApplied,
+        lines: cart.map((l) => ({ itemId: l.item.id, variationId: l.variation.id, quantity: l.quantity })),
+      }),
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!res.ok) {
+          setQuoteState({ key, quote: null, error: data.error ?? "We couldn't price this order." });
+          return;
+        }
+        setQuoteState({ key, quote: data.quote as SquareOrderQuote, error: null });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setQuoteState({ key, quote: null, error: "We couldn't reach Square to price this order." });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, quoteKey, stand.locationId]);
 
   async function applyPromo() {
     const code = promoInput.trim();
@@ -306,12 +347,12 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
           return;
         }
         // verificationDetails lets Square run SCA / 3-D Secure when the
-        // issuer demands it. The amount is the estimate; Square charges the
-        // order's real total server-side.
+        // issuer demands it. This is Square's own calculated total (from
+        // /api/quote); Square re-charges the order's real total server-side.
         let result: SquareTokenResult;
         try {
           result = await card.tokenize({
-            amount: (totals.total / 100).toFixed(2),
+            amount: ((quote?.totalCents ?? 0) / 100).toFixed(2),
             currencyCode: "CAD",
             intent: "CHARGE",
             customerInitiated: true,
@@ -334,7 +375,7 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
         body: JSON.stringify({
           locationId: stand.locationId,
           customerPhone: phone,
-          recipientName: name.trim() || null,
+          recipientName: name.trim(),
           smsOptIn,
           lines: cart.map((l) => ({ itemId: l.item.id, variationId: l.variation.id, quantity: l.quantity })),
           seat: stand.role === "in_seat" ? seat : null,
@@ -368,7 +409,9 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
     stand.role === "in_seat" && (seatConfig?.mode === "unavailable" || !seat.section || !seat.row || !seat.seat);
   const placeDisabled =
     submitting ||
+    !quote ||
     !alcoholCheck.ok ||
+    name.trim().length < 2 ||
     !phone ||
     seatIncomplete ||
     paymentsBroken ||
@@ -388,7 +431,7 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
 
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{stand.displayName}</h2>
+            <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{stand.fanName ?? stand.displayName}</h2>
             <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>
               {stand.role === "in_seat" ? "Delivery to seat" : "Pickup"}
               {!stand.isOpen && " · Not accepting online orders right now"}
@@ -432,7 +475,21 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
                 {catItems.map((item) => {
                   const alcoholic = isAlcoholicItem(item, taxesById);
                   return (
-                    <div key={item.id} className="py-1.5 border-b" style={{ borderColor: "var(--border-subtle)" }}>
+                    <div key={item.id} className="menu-item py-1.5 border-b" style={{ borderColor: "var(--border-subtle)" }}>
+                      {/* Square-hosted photo. Plain <img> on purpose: these are
+                          remote Square CDN URLs and the item list is short, so
+                          next/image's remote-pattern config buys nothing here. */}
+                      {item.imageUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          className="menu-item-image"
+                          src={item.imageUrl}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      )}
+                      <div className="menu-item-body">
                       <div className="flex items-center gap-1.5 mb-1">
                         <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{item.name}</span>
                         {alcoholic && (
@@ -441,6 +498,9 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
                           </span>
                         )}
                       </div>
+                      {item.description && (
+                        <p className="menu-item-description">{item.description}</p>
+                      )}
                       <div className="space-y-1">
                         {item.variations.map((v) => (
                           <div key={v.id} className="flex items-center justify-between">
@@ -466,6 +526,7 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
                           </div>
                         ))}
                       </div>
+                      </div>
                     </div>
                   );
                 })}
@@ -478,8 +539,13 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
                 className="w-full mt-2 py-3 rounded-lg font-semibold"
                 style={{ backgroundColor: "var(--accent-gold)", color: "var(--text-inverted)" }}
               >
-                View cart ({cartCount}) · {money(totals.total)}
+                View cart ({cartCount}) · {money(subtotal)}
               </button>
+            )}
+            {cartCount > 0 && (
+              <p className="text-[10px] text-center mt-1" style={{ color: "var(--text-tertiary)" }}>
+                Tax calculated at checkout
+              </p>
             )}
           </>
         )}
@@ -501,23 +567,54 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
                   </div>
                 </div>
               ))}
-              <div className="flex justify-between text-sm pt-2" style={{ color: "var(--text-secondary)" }}>
-                <span>Subtotal</span><span>{money(totals.subtotal)}</span>
-              </div>
-              {promoApplied && (
-                <div className="flex justify-between text-sm" style={{ color: "#16a34a" }}>
-                  <span>Code {promoApplied}</span><span>−{money(totals.discount)}</span>
+              {quoteLoading && (
+                <div className="quote-skeleton pt-2" aria-busy="true" aria-live="polite">
+                  <span className="quote-skeleton-label">Pricing your order with Square…</span>
+                  <div className="quote-skeleton-row" />
+                  <div className="quote-skeleton-row" />
+                  <div className="quote-skeleton-row is-total" />
                 </div>
               )}
-              <div className="flex justify-between text-sm" style={{ color: "var(--text-tertiary)" }}>
-                <span>Est. tax</span><span>{money(totals.tax)}</span>
-              </div>
-              <div className="flex justify-between text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                <span>Total</span><span>{money(totals.total)}</span>
-              </div>
-              <p className="text-[10px] mt-1" style={{ color: "var(--text-tertiary)" }}>
-                Tax shown is an estimate. The final total is calculated by Square and shown on your receipt.
-              </p>
+
+              {!quoteLoading && quoteError && (
+                <div className="rounded-lg px-4 py-3 mt-2 text-sm" style={{ backgroundColor: "rgba(239,68,68,0.1)", color: "#ef4444" }}>
+                  <p className="mb-2">{quoteError} Your order hasn&apos;t been placed and nothing has been charged.</p>
+                  <button
+                    type="button"
+                    onClick={() => setRetryNonce((n) => n + 1)}
+                    className="px-3 py-1.5 rounded font-semibold text-xs"
+                    style={{ backgroundColor: "var(--btn-bg)", color: "var(--btn-text)" }}
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+
+              {!quoteLoading && !quoteError && quote && (
+                <>
+                  <div className="flex justify-between text-sm pt-2" style={{ color: "var(--text-secondary)" }}>
+                    <span>Subtotal</span><span>{money(quote.subtotalCents)}</span>
+                  </div>
+                  {quote.discountCents > 0 && (
+                    <div className="flex justify-between text-sm" style={{ color: "#16a34a" }}>
+                      <span>Code {promoApplied}</span><span>−{money(quote.discountCents)}</span>
+                    </div>
+                  )}
+                  {quote.taxLines.map((t) => (
+                    <div key={`${t.name}-${t.percentage}`} className="flex justify-between text-sm" style={{ color: "var(--text-tertiary)" }}>
+                      <span>{t.name} {t.percentage}%</span><span>{money(t.amountCents)}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                    <span>Total</span><span>{money(quote.totalCents)}</span>
+                  </div>
+                  <p className="text-[10px] mt-1" style={{ color: "var(--text-tertiary)" }}>
+                    {quote.source === "mock"
+                      ? "Mock data — no Square connection, so nothing here is priced for real."
+                      : "The final total is calculated by Square and shown on your receipt."}
+                  </p>
+                </>
+              )}
             </div>
 
             {!alcoholCheck.ok && (
@@ -561,7 +658,7 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
               </h3>
               <input
                 type="text"
-                placeholder="First name (optional)"
+                placeholder="First name"
                 value={name}
                 maxLength={40}
                 autoComplete="given-name"
@@ -578,6 +675,9 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
                 className="w-full rounded px-3 py-2 text-sm border mb-2"
                 style={inputStyle}
               />
+              <p className="text-[10px] mb-2" style={{ color: "var(--text-tertiary)" }}>
+                Staff call your name at {stand.role === "in_seat" ? "delivery" : "pickup"}. Name and phone are both required.
+              </p>
               <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-tertiary)" }}>
                 <input type="checkbox" checked={smsOptIn} onChange={(e) => setSmsOptIn(e.target.checked)} />
                 Text me when my order is ready. No account needed.
@@ -655,7 +755,13 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
                 className="flex-1 py-3 rounded-lg font-semibold"
                 style={{ backgroundColor: "var(--accent-gold)", color: "var(--text-inverted)", opacity: placeDisabled ? 0.6 : 1 }}
               >
-                {submitting ? "Placing order…" : needsCard ? `Pay ${money(totals.total)}` : `Place order · ${money(totals.total)}`}
+                {submitting
+                  ? "Placing order…"
+                  : !quote
+                    ? "Place order"
+                    : needsCard
+                      ? `Pay ${money(quote.totalCents)}`
+                      : `Place order · ${money(quote.totalCents)}`}
               </button>
             </div>
             <p className="text-[10px] text-center" style={{ color: "var(--text-tertiary)" }}>
@@ -675,7 +781,7 @@ export default function OrderPanel({ stand, heat, square, onClose }: OrderPanelP
                   : `Total ${money(confirmation.amount.amount)}`}
             </p>
             <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-              {name.trim() ? `${name.trim()}, we` : "We"} have sent your order to {stand.displayName}.
+              {name.trim() ? `${name.trim()}, we` : "We"} have sent your order to {stand.fanName ?? stand.displayName}.
               {stand.role === "in_seat" ? ` It is on its way to section ${seat.section}, row ${seat.row}, seat ${seat.seat}.` : " We will text you when it is ready."}
             </p>
             {confirmation.requiresIdCheck && (

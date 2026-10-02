@@ -17,7 +17,7 @@ Tick the boxes as you go. Every command runs from the repo folder.
 | Checkout UI (laptop, production SDK) | Card field renders; coupon applies → $0.00, card hidden; Place order not pressed. |
 | Production URL | **LIVE as of ~02:40 PT**: `/api/health` = `ok` (square, redis, payments, passcode, coupon all true); four live stands, all CLOSED; staff 401/200; closed-stand gate 409 verified from outside. Deployment `2hlnk3j3d` of commit `ed1058c`. |
 | Square order creation | Payload matches Square's fulfillment rules; **proven in the sandbox** (§6): pickup + delivery orders created, paid by card and by coupon, declined card cancels the order. Never run against production yet. |
-| Payment | Card via Web Payments SDK + CreatePayment, and a 100% coupon (`ROYALS-TEST-0918`) that marks a $0 order paid. Both new tonight, both verified in the sandbox incl. the real browser card field. |
+| Payment | Card via Web Payments SDK + CreatePayment, and a 100% coupon (code: see `ORDER_PROMO_CODE` in Vercel env) that marks a $0 order paid. Both new tonight, both verified in the sandbox incl. the real browser card field. |
 
 Square fact that shaped everything: **an API order only appears on the
 register, Order Manager or kitchen printer once it is PAID.** That is why
@@ -51,7 +51,8 @@ Two things only you can do, then the rest is mine to run and verify.
      `royals-hackathon`, all environments. I confirm before accepting terms.
   3. **You:** Settings → Environment Variables → `SQUARE_ACCESS_TOKEN`
      (Production, **Sensitive**) = the production token from `.env.local`.
-  4. Me: add `ORDER_PROMO_CODE=ROYALS-TEST-0918` (Production).
+  4. Me: add `ORDER_PROMO_CODE` (Production) — value chosen at the time,
+     never written down in the repo. See Vercel env.
   5. Push `main` → auto-deploy → verify from outside:
      ```bash
      curl -s https://royals-hackathon.vercel.app/api/health
@@ -89,7 +90,7 @@ coupon order behaved. Fan Deck first because it has the printer.
 2. **Coupon order, Fan Deck, delivery.** On the fan phone: Fan Deck →
    add one cheap non-alcohol item (Coffee $3.49) → View cart → section
    108, a real row/seat → name "TEST" → your phone number → promo code
-   `ROYALS-TEST-0918` → Apply (total $0.00, card field gone) → **Place
+   the promo code (see Vercel env) → Apply (total $0.00, card field gone) → **Place
    order · $0.00**.
    - Expect: "Order received · Paid with promo code · $0.00", an order ref.
    - **Register:** the order appears in Orders / Order Manager within
@@ -155,7 +156,7 @@ from Square with RetrieveOrder / SearchOrders.
 |---|---|---|---|
 | A | Pickup, Coffee + 2 Chips, card (`cnon:card-nonce-ok`) | 200, paid $9.51, VISA ····5858, receipt URL | `PICKUP/PROPOSED`, recipient "TEST" + phone, `schedule_type ASAP`, tender `CARD 951 CAPTURED`, `net_amount_due 0` |
 | B | Pickup, declined card (`cnon:card-nonce-declined`) | 402 "Your card was declined." | order **CANCELED**, fulfillment CANCELED (after the fix: cancel fulfillment first, then order, with a re-read version) |
-| C | Fan Deck delivery, Boozy Coffee, coupon `ROYALS-TEST-0918` | 200, paidWith `promo`, $0.00, `requiresIdCheck true` | `DELIVERY/PROPOSED`, discount 900 (100% ORDER), total 0, `net_amount_due 0`, address 1925 Blanshard St, note `Seat: Sec 108 Row A Seat 1 \| ID CHECK REQUIRED AT HANDOFF` |
+| C | Fan Deck delivery, Boozy Coffee, coupon (see Vercel env) | 200, paidWith `promo`, $0.00, `requiresIdCheck true` | `DELIVERY/PROPOSED`, discount 900 (100% ORDER), total 0, `net_amount_due 0`, address 1925 Blanshard St, note `Seat: Sec 108 Row A Seat 1 \| ID CHECK REQUIRED AT HANDOFF` |
 | D | Fan Deck delivery, Boozy Coffee, card | 200, paid $9.00, receipt URL, `requiresIdCheck true` | `DELIVERY/PROPOSED`, tender `CARD 900 CAPTURED`, seat + ID note present |
 | E | 24oz draft + Boozy Coffee, card | 400 limit-1 message | nothing created |
 | F | Section 112 + card | 400 sections message | nothing created |

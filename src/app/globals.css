@@ -304,3 +304,107 @@ body {
   outline: none;
 }
 
+
+/* Checkout quote skeleton — shown while Square prices the cart. Totals are
+   never guessed locally, so there is a real wait to cover here. */
+.quote-skeleton { display: flex; flex-direction: column; gap: 0.5rem; }
+.quote-skeleton-label { font-size: 0.625rem; color: var(--text-tertiary); }
+.quote-skeleton-row {
+  height: 0.875rem;
+  border-radius: 0.25rem;
+  background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--heat-bar-bg) 37%, var(--bg-elevated) 63%);
+  background-size: 400% 100%;
+  animation: quote-shimmer 1.4s ease infinite;
+}
+.quote-skeleton-row.is-total { width: 60%; height: 1.125rem; }
+@keyframes quote-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+@media (prefers-reduced-motion: reduce) { .quote-skeleton-row { animation: none; } }
+
+/* Local-dev warning: .env.local carries PRODUCTION Square credentials, so an
+   order placed from localhost is a real order at a real stand. Rendered only
+   when NODE_ENV !== production — see liveSquareInDev() in layout.tsx. */
+.live-square-banner {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.5rem 0.875rem;
+  background: repeating-linear-gradient(45deg, #b91c1c, #b91c1c 12px, #991b1b 12px, #991b1b 24px);
+  color: #fff;
+  text-align: center;
+  line-height: 1.3;
+}
+.live-square-banner strong { font-size: 0.75rem; font-weight: 800; letter-spacing: 0.1em; }
+.live-square-banner span { font-size: 0.6875rem; opacity: 0.95; }
+
+/* Menu item with a Square-hosted photo: image on the left, text beside it.
+   Items with no photo keep the full width — most of the catalog has one, but
+   not all of it, and a placeholder box would be worse than none. */
+.menu-item { display: flex; gap: 0.625rem; align-items: flex-start; }
+.menu-item-image {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  object-fit: cover;
+  border-radius: 0.375rem;
+  background-color: var(--bg-elevated);
+  margin-top: 0.125rem;
+}
+.menu-item-body { flex: 1 1 auto; min-width: 0; }
+.menu-item-description {
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  color: var(--text-tertiary);
+  margin-bottom: 0.375rem;
+}
+
+/* "Order food" — the primary way into the menu. The arena map still works,
+   but a map dot is not a discoverable call to action. */
+.order-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.875rem 1rem;
+  border-radius: 0.75rem;
+  background-color: var(--accent-gold);
+  color: var(--text-inverted);
+  text-align: center;
+  border: none;
+  cursor: pointer;
+}
+.order-cta:disabled { opacity: 0.55; cursor: default; }
+.order-cta-main { font-size: 1rem; font-weight: 700; letter-spacing: 0.01em; }
+.order-cta-sub { font-size: 0.6875rem; opacity: 0.85; }
+
+/* One stand in the "Where are you ordering from?" sheet. */
+.stand-pick {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem 0.875rem;
+  border-radius: 0.625rem;
+  border: 1px solid var(--border-default);
+  background-color: var(--bg-input);
+  text-align: left;
+  cursor: pointer;
+}
+.stand-pick-copy { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; }
+.stand-pick-copy strong { font-size: 0.9375rem; font-weight: 650; color: var(--text-primary); }
+.stand-pick-copy small { font-size: 0.6875rem; color: var(--text-tertiary); }
+.stand-pick-state {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+}
+.stand-pick-open { color: #16a34a; font-weight: 700; }
+.stand-pick-closed { color: var(--text-tertiary); font-weight: 600; }
