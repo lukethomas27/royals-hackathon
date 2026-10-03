@@ -96,11 +96,35 @@ export async function fetchOrderCounts(
   windowMinutes: number = WINDOW_MINUTES,
   now: Date = new Date()
 ): Promise<Record<string, number>> {
+  const byWindow = await fetchRecentOrderCounts(locationIds, [windowMinutes], now);
   const counts: Record<string, number> = {};
-  for (const id of locationIds) counts[id] = 0;
-  if (locationIds.length === 0) return counts;
+  for (const id of locationIds) counts[id] = byWindow[id][windowMinutes];
+  return counts;
+}
 
-  const startAt = new Date(now.getTime() - windowMinutes * 60_000).toISOString();
+/**
+ * Order counts per location for several trailing windows at once (e.g. last
+ * 5 and last 15 minutes), from ONE SearchOrders query over the widest window.
+ * Counts every order Square has for the stand — Point of Sale and this app
+ * alike — excluding CANCELED.
+ *
+ * Raw counts are Eventium's sales figures: only the passcode-gated staff
+ * route (api/staff/orders) may return them, never a fan-facing route.
+ */
+export async function fetchRecentOrderCounts(
+  locationIds: string[],
+  windowsMinutes: number[],
+  now: Date = new Date()
+): Promise<Record<string, Record<number, number>>> {
+  const counts: Record<string, Record<number, number>> = {};
+  for (const id of locationIds) {
+    counts[id] = {};
+    for (const w of windowsMinutes) counts[id][w] = 0;
+  }
+  if (locationIds.length === 0 || windowsMinutes.length === 0) return counts;
+
+  const widest = Math.max(...windowsMinutes);
+  const startAt = new Date(now.getTime() - widest * 60_000).toISOString();
   let cursor: string | undefined;
 
   do {
@@ -121,7 +145,12 @@ export async function fetchOrderCounts(
       }),
     });
     for (const o of data.orders ?? []) {
-      if (o.location_id in counts) counts[o.location_id] += 1;
+      const perWindow = counts[o.location_id];
+      if (!perWindow) continue;
+      const ageMinutes = (now.getTime() - new Date(o.created_at).getTime()) / 60_000;
+      for (const w of windowsMinutes) {
+        if (ageMinutes <= w) perWindow[w] += 1;
+      }
     }
     cursor = data.cursor;
   } while (cursor);

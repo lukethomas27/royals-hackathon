@@ -6,8 +6,22 @@
 // scheduled cutoff as a fallback safety net. The manual switch is the real
 // control; the schedule exists because "the start of the 3rd period isn't a
 // set time" so nothing purely scheduled is ever exactly right.
+//
+// Each stand card also shows how many orders Square took there in the last
+// few minutes (POS + app). Raw counts are staff-only — fans only ever see a
+// rounded busyness level.
 
 import { useEffect, useState } from "react";
+
+interface OrderCounts {
+  asOf: string;
+  windowsMinutes: number[];
+  stands: { locationId: string; counts: Record<number, number> | null }[];
+}
+
+const ORDER_COUNTS_POLL_MS = 30_000;
+/** Older than this, the counts are flagged as stale rather than read as live. */
+const ORDER_COUNTS_STALE_MS = 2 * 60_000;
 
 interface StaffStand {
   locationId: string;
@@ -23,6 +37,10 @@ export default function StaffPage() {
   const [stands, setStands] = useState<StaffStand[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [orderCounts, setOrderCounts] = useState<OrderCounts | null>(null);
+  // Set when the fetch fails, or when the server could only serve an old
+  // snapshot because Square is unreachable.
+  const [orderCountsStale, setOrderCountsStale] = useState(false);
 
   async function load(pc: string, opts: { silent?: boolean } = {}) {
     setLoading(true);
@@ -61,6 +79,30 @@ export default function StaffPage() {
     });
     if (res.ok) load(passcode);
   }
+
+  useEffect(() => {
+    if (!authed) return;
+    let cancelled = false;
+    async function loadOrderCounts() {
+      try {
+        const res = await fetch("/api/staff/orders", { headers: { "x-staff-passcode": passcode } });
+        if (!res.ok) throw new Error(String(res.status));
+        const data: OrderCounts = await res.json();
+        if (!cancelled) {
+          setOrderCounts(data);
+          setOrderCountsStale(Date.now() - new Date(data.asOf).getTime() > ORDER_COUNTS_STALE_MS);
+        }
+      } catch {
+        if (!cancelled) setOrderCountsStale(true);
+      }
+    }
+    loadOrderCounts();
+    const timer = setInterval(loadOrderCounts, ORDER_COUNTS_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [authed, passcode]);
 
   useEffect(() => {
     // If no passcode is configured server-side, GET succeeds with any value —
@@ -108,6 +150,8 @@ export default function StaffPage() {
           Stands are CLOSED until you open them. Manual switch always wins; the scheduled cutoff is the fallback if nobody flips it back.
         </p>
 
+        <OrderCountsStatus counts={orderCounts} stale={orderCountsStale} />
+
         <div className="space-y-4">
           {stands.map((s) => (
             <div key={s.locationId} className="rounded-xl p-4" style={{ backgroundColor: "var(--bg-elevated)", border: "1px solid var(--border-subtle)" }}>
@@ -126,6 +170,8 @@ export default function StaffPage() {
                   {s.isOpen ? "OPEN" : "CLOSED"}
                 </span>
               </div>
+
+              <RecentOrders counts={orderCounts} locationId={s.locationId} />
 
               {/* Big, obvious ON/OFF — this is the control staff actually use */}
               <div className="grid grid-cols-2 gap-2 mb-3">
@@ -179,6 +225,47 @@ export default function StaffPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function OrderCountsStatus({ counts, stale }: { counts: OrderCounts | null; stale: boolean }) {
+  let text: string;
+  if (!counts) {
+    text = stale ? "Order counts unavailable — couldn't reach Square." : "Loading order counts…";
+  } else if (counts.stands.every((s) => s.counts === null)) {
+    text = "Order counts unavailable — Square isn't connected.";
+  } else {
+    const time = new Date(counts.asOf).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    text = stale
+      ? `Order counts may be out of date — last updated ${time}.`
+      : `Order counts from Square (all tills + app), updated ${time}.`;
+  }
+  return (
+    <p className="text-xs mb-4" style={{ color: stale ? "#ef4444" : "var(--text-tertiary)" }}>
+      {text}
+    </p>
+  );
+}
+
+function RecentOrders({ counts, locationId }: { counts: OrderCounts | null; locationId: string }) {
+  if (!counts) return null;
+  const standCounts = counts.stands.find((s) => s.locationId === locationId)?.counts ?? null;
+  return (
+    <div
+      className="grid gap-2 mb-3"
+      style={{ gridTemplateColumns: `repeat(${counts.windowsMinutes.length}, minmax(0, 1fr))` }}
+    >
+      {counts.windowsMinutes.map((w) => (
+        <div key={w} className="rounded-lg px-3 py-2" style={{ border: "1px solid var(--border-subtle)" }}>
+          <div className="text-xl font-bold tabular-nums" style={{ color: "var(--text-primary)" }}>
+            {standCounts ? standCounts[w] : "—"}
+          </div>
+          <div className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+            orders, last {w} min
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

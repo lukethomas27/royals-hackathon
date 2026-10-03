@@ -35,6 +35,7 @@ src/app/api/promo/route.ts        # GET ?code= — is the 100%-off test coupon v
 src/app/api/health/route.ts       # GET — non-secret readiness flags (square/redis/payments/promo)
 src/app/api/seat-config/route.ts  # GET — seat picker config (live Ordering Stations or fallback)
 src/app/api/staff/status/route.ts # GET/POST — staff open/close + cutoff, passcode-gated
+src/app/api/staff/orders/route.ts # GET — orders in the last 5/15 min per stand (all tills + app), passcode-gated, staff only
 src/lib/square/                   # All Square API integration — see STATUS.md for real-vs-stub detail
   types.ts       # Narrow typed subset of the Square API this app touches
   client.ts      # Fetch wrapper (SQUARE_ACCESS_TOKEN / SQUARE_ENVIRONMENT)
@@ -105,9 +106,10 @@ public/data/games/               # 68 game JSON files + index.json
   (POS fulfillments are born COMPLETED) and no prep times (created_at ->
   closed_at is the card payment, median 2.3s). Never reintroduce a minutes
   figure derived from heat — that is what the old `Math.round(heat * 15)` was.
-- Order counts and till counts are server-side only and never appear in an API
-  response; heat is rounded to 2dp so a page view cannot be read back as
-  either.
+- Till counts are server-side only and never appear in an API response. Order
+  counts appear in exactly one: the passcode-gated `/api/staff/orders`, shown
+  on `/staff` only. Every fan-facing route gets heat rounded to 2dp, so a page
+  view cannot be read back as either count.
 - The simulation is kept for demos and gated on `NODE_ENV` alone. No query
   flag: anyone could add one to the live URL.
 
