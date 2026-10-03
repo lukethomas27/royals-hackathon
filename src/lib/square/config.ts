@@ -79,7 +79,7 @@ export function getStaffPasscode(): string | null {
  * strings (e.g. "SOFMC Island Canteen") — that's the only identifier that
  * export will ever have, and it predates this project's Square-location-ID
  * rule. This map links a launch slot to its historical CSV key purely so
- * the busy-ness / "best time to go" heat feature (section 10: the genuine
+ * the heat-map simulation (section 10: the genuine
  * carried-forward asset) can still find its data. It is NOT used for
  * display, ordering, or anything fan-facing — those are 100% live off
  * SQUARE_STAND_SLOT_*_LOCATION_ID. If a slot has no historical key

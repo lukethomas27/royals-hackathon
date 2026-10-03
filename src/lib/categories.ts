@@ -9,7 +9,7 @@ export const CATEGORY_OPTIONS: { value: FanCategory; label: string }[] = [
 ];
 
 // Map fan-friendly categories to the historical CSV data's category values.
-// This only drives the heat-map / "best time to go" feature (section 10 of
+// This only drives the heat-map simulation (section 10 of
 // the build doc — the carried-forward differentiator), not live ordering.
 const CATEGORY_DATA_MAP: Record<Exclude<FanCategory, "all">, string[]> = {
   food: ["Food"],
