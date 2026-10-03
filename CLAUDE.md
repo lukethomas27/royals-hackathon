@@ -73,9 +73,14 @@ public/data/games/               # 68 game JSON files + index.json
 ## Busyness (live, from Square orders)
 
 - Busyness comes from **real Square order volume**, not the simulation:
-  orders/min over a rolling 15 min, from `/api/busyness` (one SearchOrders call
-  for all four stands per ~45s, cached). Only the four configured location IDs
-  are ever queried — the token reaches 62.
+  orders/min from `/api/busyness` (one SearchOrders call for all four stands
+  per ~30s, cached; the page polls every 30s). Only the four configured
+  location IDs are ever queried — the token reaches 62.
+- **Slow to rise, quick to fall.** The rate is the LOWER of the last-5-min and
+  last-15-min rates (`orderRate` in `square/busyness.ts`). Climbing into a rush
+  follows the 15-min window as before; a stand that goes dead reaches Quiet
+  ~5 min after its last sale instead of reading "Busy" for 15. Don't revert to
+  a flat 15-min average: that lag was reported from the arena on Oct 3 2026.
 - **It is comparable across stands, because order rate is divided by tills:**
 
   ```
@@ -89,7 +94,9 @@ public/data/games/               # 68 game JSON files + index.json
 - **Till counts live in `square/tills.ts` and nowhere else.** They are
   **Eventium's game-night estimates** (Matt Cooke, Oct 2 2026), stated as
   ranges — Concession 1: 8-12, Concession 2: 3-6, Concession 3: 3-4, Fan Deck
-  Bar: 3-6 — and we use the midpoint of each. Actual staffing varies game to
+  Bar: 3-6 — and we use the midpoint of each, except Concession 1 at the top of
+  its range (12): on Oct 3 2026 it read "Busy" sooner than the others for the
+  line it actually had. An on-site judgement, not a measured count. Actual staffing varies game to
   game. **If Eventium reports the tills they ran for a specific night, that
   file is the one place to change.**
 - Caveats worth knowing: a range treated as a constant means a stand running

@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
  * The cache is a cache, not state: unlike staff open/close, losing it costs a
  * refetch, so an in-process fallback is fine when Redis is not configured.
  */
-const CACHE_TTL_MS = 45_000;
+const CACHE_TTL_MS = 30_000;
 const CACHE_KEY = "arenapulse:busyness:v1";
 /** Served while a refresh fails, until MAX_AGE_MS makes it "no live data". */
 const STALE_SERVE_MS = MAX_AGE_MS;

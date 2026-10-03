@@ -1,7 +1,7 @@
 // Tills (serving positions) per stand on a game night.
 //
 // Source: Eventium, Matt Cooke, Oct 2 2026. Stated as ranges; we use the
-// midpoint of each. These are Eventium's game-night ESTIMATES, not a live
+// midpoint of each, except Concession 1 (see below). These are Eventium's game-night ESTIMATES, not a live
 // feed — actual staffing varies game to game. If Eventium ever reports the
 // tills they ran for a specific night, THIS FILE is the one place to change.
 //
@@ -12,7 +12,10 @@
 //
 // Server-side only. Till counts are never exposed in an API response.
 const TILLS_BY_LOCATION: Record<string, number> = {
-  "06KYFX4ZMH3XB": 10, // Concession 1 — Eventium: 8-12
+  // Concession 1 — Eventium: 8-12. Top of the range, not the midpoint: on
+  // Oct 3 2026 Luke saw it read "Busy" sooner than the other stands for the
+  // line it actually had. An on-site judgement, not a measured till count.
+  "06KYFX4ZMH3XB": 12,
   LARSXNSYK7Z6G: 4.5, // Concession 2 — Eventium: 3-6
   L21YPQA79XH0J: 3.5, // Concession 3 — Eventium: 3-4
   LZQZQS9G9XF1M: 4.5, // Fan Deck Bar — Eventium: 3-6

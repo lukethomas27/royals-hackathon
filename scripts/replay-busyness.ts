@@ -6,7 +6,14 @@
  * nothing. Run with:
  *   npx tsx --env-file=.env.local scripts/replay-busyness.ts [YYYY-MM-DD]
  */
-import { heatFromRate, heatLabel, perTillReference, WINDOW_MINUTES } from "../src/lib/square/busyness";
+import {
+  heatFromRate,
+  heatLabel,
+  orderRate,
+  perTillReference,
+  RECENT_WINDOW_MINUTES,
+  WINDOW_MINUTES,
+} from "../src/lib/square/busyness";
 import { tillsFor } from "../src/lib/square/tills";
 
 const STANDS: Record<string, string> = {
@@ -64,30 +71,33 @@ async function main() {
   const orders = await searchAll(start, end);
   console.log(`${orders.length} orders, ${day} (window ${start} -> ${end})\n`);
 
-  // The live route measures a rolling 15-minute window; here each bucket is
-  // one such window, which is the same arithmetic the route performs.
-  const bucketMs = WINDOW_MINUTES * 60_000;
-  const buckets = new Map<number, Record<string, number>>();
-  for (const o of orders) {
-    const key = Math.floor(new Date(o.created_at).getTime() / bucketMs) * bucketMs;
-    const row = buckets.get(key) ?? {};
-    row[o.location_id] = (row[o.location_id] ?? 0) + 1;
-    buckets.set(key, row);
-  }
+  // Same arithmetic as the live route: at each target time, count orders in
+  // the trailing 5 and 15 minutes and take the lower rate (orderRate).
+  const times = orders.map((o) => ({ id: o.location_id, t: new Date(o.created_at).getTime() }));
+  const countSince = (id: string, from: number, to: number) =>
+    times.filter((o) => o.id === id && o.t > from && o.t <= to).length;
 
   const wanted = process.env.REPLAY_TIMES?.split(",") ?? ["17:45", "18:45"];
   console.log(`heat and label at ${wanted.join(" and ")} PT:\n`);
+  const startMs = new Date(start).getTime();
+  const endMs = new Date(end).getTime();
   for (const target of wanted) {
-    const key = [...buckets.keys()].sort((a, b) => a - b).find((k) => hhmm(k) === target);
-    if (key === undefined) {
-      console.log(`   ${target} — no orders in this bucket\n`);
+    let at: number | undefined;
+    for (let t = startMs; t <= endMs; t += 60_000) {
+      if (hhmm(t) === target) {
+        at = t;
+        break;
+      }
+    }
+    if (at === undefined) {
+      console.log(`   ${target} — outside the replayed evening\n`);
       continue;
     }
-    console.log(`   ${hhmm(key)} PT`);
+    console.log(`   ${hhmm(at)} PT`);
     for (const id of IDS) {
-      const count = buckets.get(key)![id] ?? 0;
-      const perMin = count / WINDOW_MINUTES;
-      const heat = heatFromRate(perMin, tillsFor(id), perTillReference());
+      const recent = countSince(id, at - RECENT_WINDOW_MINUTES * 60_000, at);
+      const window = countSince(id, at - WINDOW_MINUTES * 60_000, at);
+      const heat = heatFromRate(orderRate(recent, window), tillsFor(id), perTillReference());
       const bar = "#".repeat(Math.round(heat * 20)).padEnd(20, ".");
       console.log(
         `      ${STANDS[id].padEnd(16)} ${bar} heat ${heat.toFixed(2).padStart(5)}  ${heatLabel(heat)}`

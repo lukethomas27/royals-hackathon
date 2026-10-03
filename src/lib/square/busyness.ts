@@ -19,6 +19,16 @@ import { tillsFor } from "./tills";
 /** Rolling window the live rate is measured over. */
 export const WINDOW_MINUTES = 15;
 
+/**
+ * Short window that caps the rate, so busyness tapers off fast. A flat
+ * 15-minute average keeps counting a rush that ended ten minutes ago: a stand
+ * that has gone dead kept reading "Busy" for up to 15 minutes. Taking the
+ * lower of the two rates (see orderRate) means busyness can only be as high
+ * as the last 5 minutes support, while the climb into a rush is still
+ * governed by the 15-minute window exactly as before.
+ */
+export const RECENT_WINDOW_MINUTES = 5;
+
 /** Busyness older than this is not shown as live. */
 export const MAX_AGE_MS = 5 * 60 * 1000;
 
@@ -75,6 +85,19 @@ export function heatLabel(heat: number): string {
  * so per till it is the LEAST pressed — the opposite of what raw rate says,
  * and the answer a fan deciding where to walk actually needs.
  */
+/**
+ * Orders per minute from the two windows: slow to rise, quick to fall.
+ *
+ * - Rising (orders arriving faster than the 15-min average): the recent rate
+ *   is the higher one, so the 15-min rate wins — unchanged behaviour.
+ * - Falling (stand going quiet): the recent rate drops first and wins. With
+ *   no orders at all, busyness reaches zero RECENT_WINDOW_MINUTES after the
+ *   last sale instead of WINDOW_MINUTES.
+ */
+export function orderRate(recentCount: number, windowCount: number): number {
+  return Math.min(recentCount / RECENT_WINDOW_MINUTES, windowCount / WINDOW_MINUTES);
+}
+
 export function heatFromRate(ordersPerMinute: number, tills: number, reference: number): number {
   if (tills <= 0 || reference <= 0) return 0;
   return Math.max(0, Math.min(1, ordersPerMinute / tills / reference));
@@ -87,24 +110,10 @@ interface SearchOrdersResponse {
 }
 
 /**
- * Order counts per location over the window. ONE Square call for all four
- * stands — never one per stand, and never one per page view (see the cache in
- * api/busyness). Counts stay server-side: they are Eventium's sales figures.
- */
-export async function fetchOrderCounts(
-  locationIds: string[],
-  windowMinutes: number = WINDOW_MINUTES,
-  now: Date = new Date()
-): Promise<Record<string, number>> {
-  const byWindow = await fetchRecentOrderCounts(locationIds, [windowMinutes], now);
-  const counts: Record<string, number> = {};
-  for (const id of locationIds) counts[id] = byWindow[id][windowMinutes];
-  return counts;
-}
-
-/**
  * Order counts per location for several trailing windows at once (e.g. last
  * 5 and last 15 minutes), from ONE SearchOrders query over the widest window.
+ * ONE Square call for all four stands — never one per stand, and never one
+ * per page view (see the cache in api/busyness).
  * Counts every order Square has for the stand — Point of Sale and this app
  * alike — excluding CANCELED.
  *
@@ -174,7 +183,10 @@ export async function computeBusyness(
 
   // Only query the stands that are actually open — fewer orders to page
   // through, and a closed stand's rate is not used for anything.
-  const counts = openIds.length > 0 && isSquareConfigured() ? await fetchOrderCounts(openIds, WINDOW_MINUTES, now) : {};
+  const counts =
+    openIds.length > 0 && isSquareConfigured()
+      ? await fetchRecentOrderCounts(openIds, [RECENT_WINDOW_MINUTES, WINDOW_MINUTES], now)
+      : {};
 
   return {
     asOf: now.toISOString(),
@@ -185,7 +197,8 @@ export async function computeBusyness(
       if (!isSquareConfigured()) {
         return { locationId, state: "unknown" as const, heat: null, label: null };
       }
-      const perMinute = (counts[locationId] ?? 0) / WINDOW_MINUTES;
+      const c = counts[locationId];
+      const perMinute = c ? orderRate(c[RECENT_WINDOW_MINUTES], c[WINDOW_MINUTES]) : 0;
       // Rounded to 2dp: enough for a colour, coarse enough that a page view
       // cannot be read back as an order count or a till count.
       const heat =

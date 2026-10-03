@@ -57,6 +57,28 @@ Then run the 6-step smoke test in `HANDOFF.md` §6.
 
 ---
 
+## Update — Oct 3, 2026 (game night): busyness tapers off faster
+
+Reported from the arena: Concession 1 was dead but still read "Busy", and it
+read "Busy" sooner than the other stands.
+
+- **Lag fixed.** Busyness was a flat average over the last 15 minutes, so a
+  rush kept counting in full until it aged out — up to 15 minutes of "Busy"
+  after a stand went quiet. The rate is now the lower of the 5-minute and
+  15-minute rates: rising is unchanged, falling reaches Quiet about 5 minutes
+  after the last sale. Server cache and page poll both cut to 30s (were 45s
+  and 60s), so the worst-case extra delay is ~1 min instead of ~1¾.
+- **Concession 1 tills 10 → 12** (top of Eventium's 8-12 range). With more
+  tills it takes ~20% more orders/min to read the same busyness. This is a
+  judgement from what was seen on site, not a measured till count. If it now
+  reads too quiet, it's one number in `src/lib/square/tills.ts`.
+- Not verifiable from the session that made the change (no Square token
+  there). Check on the next game night, using `/staff`'s last-5-min counts
+  next to what the lines actually look like; `scripts/replay-busyness.ts`
+  now uses the same formula for replaying a past night.
+
+---
+
 ## Update — Oct 3, 2026: recent order counts on `/staff`
 
 Each stand card on `/staff` now shows how many orders Square took there in

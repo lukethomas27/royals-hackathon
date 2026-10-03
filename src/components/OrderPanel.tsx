@@ -552,7 +552,7 @@ export default function OrderPanel({
             <div className="menu-busy-row">
               <BusynessMeter busyness={busyness} />
               {liveHeat !== null && (
-                <p className="menu-busy-note">based on sales in the last 15 min</p>
+                <p className="menu-busy-note">based on recent sales</p>
               )}
             </div>
 

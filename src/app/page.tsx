@@ -156,7 +156,7 @@ export default function Home() {
         });
     };
     load();
-    const poll = setInterval(load, 60_000);
+    const poll = setInterval(load, 30_000);
     const tick = setInterval(() => setNow(Date.now()), 30_000);
     return () => {
       cancelled = true;
@@ -306,7 +306,7 @@ export default function Home() {
 
       {!allClosed && updatedAgoLabel && (
         <p className="w-full text-[10px] mb-2" style={{ color: "var(--text-tertiary)" }}>
-          Busyness from sales in the last 15 min · {updatedAgoLabel}
+          Busyness from recent sales · {updatedAgoLabel}
         </p>
       )}
 
