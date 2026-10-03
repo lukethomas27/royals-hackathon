@@ -93,11 +93,11 @@ export interface SquareCreateOrderRequest {
    */
   standAddress?: SquareAddress | null;
   /**
-   * When set, a 100% ORDER-scope discount with this label is attached, so
-   * the order total is $0 and it can be marked paid with no card. Only ever
-   * set after the server has validated the promo code (see promo.ts).
+   * When set, an ORDER-scope percentage discount with this label is attached.
+   * At "100" the order total is $0 and it can be marked paid with no card.
+   * Only ever set after the server has validated the promo code (see promo.ts).
    */
-  fullDiscountName?: string | null;
+  discount?: { name: string; percentage: string } | null;
 }
 
 /**

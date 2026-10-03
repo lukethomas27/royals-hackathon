@@ -86,10 +86,10 @@ function buildOrderPayload(req: OrderShape) {
       quantity: li.quantity,
       note: li.note,
     })),
-    ...(req.fullDiscountName
+    ...(req.discount
       ? {
           discounts: [
-            { uid: "promo", name: req.fullDiscountName, percentage: "100", scope: "ORDER" },
+            { uid: "promo", name: req.discount.name, percentage: req.discount.percentage, scope: "ORDER" },
           ],
         }
       : {}),

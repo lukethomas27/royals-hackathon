@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isSquareConfigured } from "@/lib/square/client";
 import { getConfiguredStandSlots } from "@/lib/square/config";
-import { getPromoCode } from "@/lib/square/promo";
+import { getDiscountCode, getPromoCode } from "@/lib/square/promo";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +23,9 @@ export async function GET() {
     payments: square && Boolean(process.env.NEXT_PUBLIC_SQUARE_APPLICATION_ID),
     // True only while a 100%-off test code is live. Must be false at launch.
     promoCodeActive: Boolean(getPromoCode()),
+    // Partial-discount code (ORDER_DISCOUNT_CODE). Percentage is not secret;
+    // the code itself is never returned. null = no discount code live.
+    discountCodePercent: getDiscountCode()?.percentage ?? null,
   };
   const ready = checks.square && checks.stands && checks.redis && checks.staffPasscode && checks.payments;
   return NextResponse.json(

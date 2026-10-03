@@ -138,6 +138,9 @@ export default function OrderPanel({
   const [seat, setSeat] = useState({ section: "", row: "", seat: "" });
   const [promoInput, setPromoInput] = useState("");
   const [promoApplied, setPromoApplied] = useState<string | null>(null);
+  // True when the applied code is the 100% test code: no card is asked for.
+  // A partial code (e.g. 10% off) still needs a card for the remainder.
+  const [promoFree, setPromoFree] = useState(false);
   const [promoMessage, setPromoMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,7 +159,7 @@ export default function OrderPanel({
   // token (mock mode) the server fakes the payment, so no card is asked for.
   const paymentsEnabled = Boolean(square?.configured && square.applicationId);
   const paymentsBroken = Boolean(square?.configured && !square.applicationId);
-  const needsCard = paymentsEnabled && !promoApplied;
+  const needsCard = paymentsEnabled && !(promoApplied && promoFree);
 
   useEffect(() => {
     setLoading(true);
@@ -376,9 +379,15 @@ export default function OrderPanel({
       const data = await res.json();
       if (data.valid) {
         setPromoApplied(code.toUpperCase());
-        setPromoMessage("Code applied. No payment needed for this order.");
+        setPromoFree(Boolean(data.free));
+        setPromoMessage(
+          data.free
+            ? "Code applied. No payment needed for this order."
+            : `Code applied. ${data.percentage}% off your order.`
+        );
       } else {
         setPromoApplied(null);
+        setPromoFree(false);
         setPromoMessage("That code is not valid.");
       }
     } catch {
@@ -388,6 +397,7 @@ export default function OrderPanel({
 
   function clearPromo() {
     setPromoApplied(null);
+    setPromoFree(false);
     setPromoInput("");
     setPromoMessage(null);
   }
@@ -886,7 +896,7 @@ export default function OrderPanel({
                 Online payment is not available right now. Please order at the counter.
               </div>
             )}
-            {!paymentsEnabled && !paymentsBroken && !promoApplied && (
+            {!paymentsEnabled && !paymentsBroken && !(promoApplied && promoFree) && (
               <p className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
                 DEMO MODE — no card is charged and nothing is sent to Square.
               </p>

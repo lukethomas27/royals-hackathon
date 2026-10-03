@@ -3,7 +3,7 @@ import { getStandByLocationId } from "@/lib/square/locations";
 import { calculateOrder } from "@/lib/square/orders";
 import { resolveCartLines, CartLineInput } from "@/lib/square/cart";
 import { validateAlcoholLimits } from "@/lib/square/tax";
-import { isPromoCodeValid, normalizePromoCode } from "@/lib/square/promo";
+import { resolvePromo } from "@/lib/square/promo";
 import { isSquareConfigured, SquareApiError } from "@/lib/square/client";
 import { SquareOrderQuote } from "@/lib/square/types";
 
@@ -34,8 +34,7 @@ export async function POST(req: NextRequest) {
   }
 
   const alcoholCheck = validateAlcoholLimits(cart.cartLines, cart.taxesById);
-  const promoEntered = normalizePromoCode(body.promoCode);
-  const promoValid = promoEntered.length > 0 && isPromoCodeValid(promoEntered);
+  const promo = resolvePromo(body.promoCode);
 
   if (!isSquareConfigured()) {
     // Local dev with no credentials: mirror createOrder's mock behaviour so
@@ -44,12 +43,13 @@ export async function POST(req: NextRequest) {
       (sum, l) => sum + (l.variation.priceMoney?.amount ?? 0) * l.quantity,
       0
     );
+    const discountCents = promo ? Math.round((subtotalCents * Number(promo.percentage)) / 100) : 0;
     const quote: SquareOrderQuote = {
       currency: "CAD",
       subtotalCents,
-      discountCents: promoValid ? subtotalCents : 0,
+      discountCents,
       taxCents: 0,
-      totalCents: promoValid ? 0 : subtotalCents,
+      totalCents: subtotalCents - discountCents,
       taxLines: [],
       source: "mock",
     };
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       // Square requires a recipient on the fulfillment. Neither affects price.
       recipientName: "Quote",
       standAddress: stand.address,
-      fullDiscountName: promoValid ? `Promo ${promoEntered}` : null,
+      discount: promo ? { name: `Promo ${promo.code}`, percentage: promo.percentage } : null,
     });
     return NextResponse.json({
       quote: { ...quote, source: "live" as const },

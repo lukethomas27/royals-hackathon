@@ -161,6 +161,14 @@ Sep 18. Summary of what changed tonight:
   with `PayOrder` + empty `payment_ids` (documented Square behaviour). No
   card, no money, but the order prints like a paid one. **Delete the env
   var after the test.** `/api/promo?code=` lets the UI hide the card form.
+- **Discount code** (`promo.ts`, added Oct 3 2026): `ORDER_DISCOUNT_CODE`
+  + `ORDER_DISCOUNT_PERCENT` (default 10). Same path as the coupon above but
+  with a partial ORDER-scope percentage, so Square prices it (pre-tax) in
+  both `/api/quote` and the created order, and the fan still pays the
+  remainder by card. `/api/promo` returns `{valid, percentage, free}`;
+  `/api/health` shows `discountCodePercent`. **Not yet verified against
+  sandbox/live Square** — check a quote shows the discount line and that the
+  tax lines drop with it before announcing a code.
 - **Fulfillment payload fixed** (`orders.ts`): recipient name (optional
   new "Name for pickup" field, else `Fan ····1234`) + phone, `ASAP` with
   `PT10M`/`PT15M` prep, delivery address = the stand's own Square location

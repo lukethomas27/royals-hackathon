@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStandByLocationId } from "@/lib/square/locations";
 import { createOrder, cancelOrder } from "@/lib/square/orders";
 import { chargeOrder, markZeroOrderPaid, PaymentDeclinedError } from "@/lib/square/payments";
-import { isPromoCodeValid, normalizePromoCode } from "@/lib/square/promo";
+import { normalizePromoCode, resolvePromo } from "@/lib/square/promo";
 import { validateAlcoholLimits } from "@/lib/square/tax";
 import { resolveCartLines, CartLineInput } from "@/lib/square/cart";
 import { getSeatPickerConfig, validateSeatSelection } from "@/lib/square/stations";
@@ -26,7 +26,7 @@ interface OrderRequestBody {
   seat?: { section: string; row: string; seat: string } | null;
   /** Name called out at handoff. Required. */
   recipientName?: string | null;
-  /** Web Payments SDK card token. Required unless a valid promo code zeroes the order. */
+  /** Web Payments SDK card token. Required unless a valid 100% promo code zeroes the order. */
   sourceId?: string | null;
   promoCode?: string | null;
 }
@@ -59,14 +59,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Promo: the only way to place an order without a card token.
+  // Promo: a 100% code is the only way to place an order without a card
+  // token. A partial (e.g. 10%) code still needs a card for the remainder.
   const promoEntered = normalizePromoCode(body.promoCode);
-  const promoValid = promoEntered.length > 0 && isPromoCodeValid(promoEntered);
-  if (promoEntered && !promoValid) {
+  const promo = resolvePromo(promoEntered);
+  if (promoEntered && !promo) {
     return NextResponse.json({ error: "That code is not valid." }, { status: 400 });
   }
   const live = isSquareConfigured();
-  if (live && !promoValid && !body.sourceId) {
+  if (live && !promo?.free && !body.sourceId) {
     return NextResponse.json({ error: "Card details are required." }, { status: 400 });
   }
 
@@ -119,7 +120,7 @@ export async function POST(req: NextRequest) {
       customerPhone: body.customerPhone,
       recipientName,
       standAddress: stand.address,
-      fullDiscountName: promoValid ? `Promo ${promoEntered}` : null,
+      discount: promo ? { name: `Promo ${promo.code}`, percentage: promo.percentage } : null,
       requiresIdCheckNote: alcoholCheck.requiresIdCheck ? "ID CHECK REQUIRED AT HANDOFF" : undefined,
     });
   } catch (err) {
@@ -141,7 +142,7 @@ export async function POST(req: NextRequest) {
     if (order.totalMoney.amount === 0) {
       // 100% promo (or a genuinely free order): no card, PayOrder with no payments.
       await markZeroOrderPaid(order.orderId, order.version);
-      if (promoValid) paidWith = "promo";
+      if (promo?.free) paidWith = "promo";
     } else {
       if (!body.sourceId) {
         // Promo was valid but did not zero the order — refuse rather than charge.
