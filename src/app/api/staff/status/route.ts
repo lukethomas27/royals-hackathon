@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStands } from "@/lib/square/locations";
-import { getStaffPasscode } from "@/lib/square/config";
 import { getStandOrderingState, setStandOrderingState, isOrderingOpen } from "@/lib/staffState";
-
-function checkAuth(req: NextRequest): boolean {
-  const configured = getStaffPasscode();
-  if (!configured) return true; // dev fallback — STATUS.md flags this as unsafe for launch
-  const provided = req.headers.get("x-staff-passcode");
-  return provided === configured;
-}
+import { isStaffAuthorized } from "@/lib/staffAuth";
 
 export async function GET(req: NextRequest) {
-  if (!checkAuth(req)) {
+  if (!isStaffAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const stands = await getStands();
@@ -25,7 +18,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!checkAuth(req)) {
+  if (!isStaffAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const body = await req.json();

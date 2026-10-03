@@ -57,6 +57,29 @@ Then run the 6-step smoke test in `HANDOFF.md` §6.
 
 ---
 
+## Update — Oct 3, 2026: recent order counts on `/staff`
+
+Each stand card on `/staff` now shows how many orders Square took there in
+the **last 5 and last 15 minutes**. It comes from `/api/staff/orders`: one
+SearchOrders call for the four configured stands, cached 30s, polled by the
+page every 30s.
+
+- **Counts every order at the stand: POS tills and this app**, excluding
+  CANCELED. It is counted whether or not app ordering is open, because the
+  tills keep selling.
+- **Staff-only, deliberately.** Raw counts are Eventium's sales figures. The
+  route uses the same `STAFF_PASSCODE` gate as `/api/staff/status`
+  (`src/lib/staffAuth.ts`), and in production it returns 503 rather than the
+  counts if the passcode is unset. Fans still only see the rounded busyness
+  level.
+- Untested against the live account from the session that built it (no
+  token there). The query is the same one `/api/busyness` already runs live;
+  bucketing was checked against a stubbed Square response. **Check on the next
+  game night:** the 15-minute number should be close to the POS order count
+  for the same stretch.
+
+---
+
 ## Update — Oct 2, 2026: SMS dropped, live order tracker instead
 
 Texting the fan needed a messaging subscription we don't have, so the "Text
