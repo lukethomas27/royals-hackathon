@@ -7,6 +7,7 @@ import { MapStand } from "./ArenaMap";
 import { StandBusyness } from "@/lib/square/busyness";
 import BusynessMeter from "./BusynessMeter";
 import ItemDetailSheet from "./ItemDetailSheet";
+import OptionPickerSheet from "./OptionPickerSheet";
 import { primeChime, TrackedOrder } from "@/lib/trackedOrders";
 
 // Display order for live category names (Square reporting categories).
@@ -244,9 +245,24 @@ export default function OrderPanel({
   // see src/lib/square/busyness.ts.
   const liveHeat = busyness ? (busyness.state === "live" ? busyness.heat : null) : heat;
 
+  /**
+   * Last add, so the card can flash and the header cart can bump. The nonce
+   * restarts the animation when the same item is added twice in a row.
+   */
+  const [justAdded, setJustAdded] = useState<{ itemId: string; nonce: number } | null>(null);
+  const [addedAnnouncement, setAddedAnnouncement] = useState("");
+  useEffect(() => {
+    if (!justAdded) return;
+    const t = setTimeout(() => setJustAdded(null), 900);
+    return () => clearTimeout(t);
+  }, [justAdded]);
+
   function addToCart(item: SquareCatalogItem, variationId: string, qty = 1) {
     const variation = item.variations.find((v) => v.id === variationId);
     if (!variation) return;
+    setJustAdded((prev) => ({ itemId: item.id, nonce: (prev?.nonce ?? 0) + 1 }));
+    const optionName = item.variations.length > 1 && variation.name.trim() ? ` (${variation.name.trim()})` : "";
+    setAddedAnnouncement(`Added ${qty} ${item.name}${optionName} to your cart.`);
     // The page tracks which stand the cart belongs to; an order can only ever
     // go to one Square location.
     onCartStandChange(stand.locationId);
@@ -269,6 +285,22 @@ export default function OrderPanel({
 
   /** Item tapped for its detail sheet (the + button adds directly instead). */
   const [detailItem, setDetailItem] = useState<SquareCatalogItem | null>(null);
+  /** Item whose + opened the option popup (only items with 2+ options). */
+  const [pickerItem, setPickerItem] = useState<SquareCatalogItem | null>(null);
+
+  /**
+   * The card's +. One option: straight into the cart. Several: the fan picks
+   * in a popup — never silently the first variation Square lists.
+   */
+  function onAddPress(item: SquareCatalogItem) {
+    const sellable = item.variations.filter((v) => !v.soldOut);
+    if (sellable.length === 0) return;
+    if (item.variations.length > 1) {
+      setPickerItem(item);
+      return;
+    }
+    addToCart(item, sellable[0].id);
+  }
 
   function changeQty(variationId: string, delta: number) {
     setCart((prev) =>
@@ -288,6 +320,11 @@ export default function OrderPanel({
   );
 
   const cartCount = cart.reduce((n, l) => n + l.quantity, 0);
+  const qtyByItem = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const l of cart) m.set(l.item.id, (m.get(l.item.id) ?? 0) + l.quantity);
+    return m;
+  }, [cart]);
   const cartKey = cart.map((l) => `${l.variation.id}x${l.quantity}`).join(",");
   const quoteKey = `${cartKey}|${promoApplied ?? ""}#${retryNonce}`;
   const quoteCurrent = quoteState?.key === quoteKey ? quoteState : null;
@@ -479,8 +516,30 @@ export default function OrderPanel({
             <h2 className="an-display">{stand.fanName ?? stand.displayName}</h2>
             <p>{stand.role === "in_seat" ? "Delivered to your seat" : "Pick up at the stand"}</p>
           </div>
-          <BusynessMeter busyness={busyness} />
+          {phase === "menu" && (
+            <button
+              type="button"
+              onClick={() => setPhase("checkout")}
+              disabled={cartCount === 0}
+              className={`stand-sheet-cart an-tap ${cartCount > 0 ? "has-items" : ""}`}
+              aria-label={cartCount > 0 ? `View cart, ${cartCount} items, ${money(subtotal)}` : "Cart is empty"}
+            >
+              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="20" r="1.5" />
+                <circle cx="18" cy="20" r="1.5" />
+                <path d="M2.5 3h2.6l2.4 11.2a1.5 1.5 0 0 0 1.5 1.2h8.9a1.5 1.5 0 0 0 1.4-1.1L21.5 7H6" />
+              </svg>
+              {cartCount > 0 && (
+                <span key={justAdded?.nonce ?? 0} className={`stand-sheet-cart-count ${justAdded ? "is-bumped" : ""}`}>
+                  {cartCount}
+                </span>
+              )}
+            </button>
+          )}
         </div>
+
+        {/* Screen-reader confirmation for adds; the card flash is the visual one. */}
+        <p className="sr-only" aria-live="polite">{addedAnnouncement}</p>
 
         {!stand.isOpen && (
           <div className="rounded-lg px-4 py-3 mb-4 text-sm" style={{ backgroundColor: "var(--heat-bar-bg)", color: "var(--text-secondary)" }}>
@@ -490,9 +549,12 @@ export default function OrderPanel({
 
         {phase === "menu" && (
           <>
-            {liveHeat !== null && (
-              <p className="menu-busy-note">based on sales in the last 15 min</p>
-            )}
+            <div className="menu-busy-row">
+              <BusynessMeter busyness={busyness} />
+              {liveHeat !== null && (
+                <p className="menu-busy-note">based on sales in the last 15 min</p>
+              )}
+            </div>
 
             {menuSource === "mock" && (
               <div className="text-[10px] mb-3 px-2 py-1 rounded inline-block" style={{ backgroundColor: "var(--heat-bar-bg)", color: "var(--text-tertiary)" }}>
@@ -541,8 +603,22 @@ export default function OrderPanel({
                     const first = item.variations.find((v) => !v.soldOut) ?? item.variations[0];
                     const price = first?.priceMoney?.amount ?? 0;
                     const soldOut = item.variations.every((v) => v.soldOut);
+                    const hasOptions = item.variations.length > 1;
+                    const pricesVary = new Set(item.variations.map((v) => v.priceMoney?.amount ?? 0)).size > 1;
+                    const inCart = qtyByItem.get(item.id) ?? 0;
+                    // A one-option item in the cart gets a −/+ stepper on the
+                    // card. With several options "−" would be ambiguous, so
+                    // those keep Add (which reopens the popup).
+                    const singleLine = !hasOptions && inCart > 0 ? cart.find((l) => l.item.id === item.id) : undefined;
+                    const flashing = justAdded?.itemId === item.id;
                     return (
-                      <div key={item.id} className="menu-tile">
+                      <div
+                        key={item.id}
+                        className={`menu-tile ${inCart > 0 ? "is-in-cart" : ""} ${flashing ? "is-flashing" : ""}`}
+                      >
+                        {inCart > 0 && (
+                          <span className="menu-tile-badge" aria-hidden="true">✓ {inCart}</span>
+                        )}
                         {/* Tapping the tile opens the detail sheet; the + adds
                             one straight to the cart without the detour. */}
                         <button
@@ -562,19 +638,49 @@ export default function OrderPanel({
                           <span className="menu-tile-name">{item.name}</span>
                           {item.description && <span className="menu-tile-desc">{item.description}</span>}
                           <span className="menu-tile-foot">
-                            <span className="menu-tile-price an-price">{price ? money(price) : "—"}</span>
+                            <span className="menu-tile-price an-price">
+                              {pricesVary && price ? "from " : ""}
+                              {price ? money(price) : "—"}
+                            </span>
                             {alcoholic && <span className="menu-tile-19 an-label">19+</span>}
                           </span>
+                          {hasOptions && (
+                            <span className="menu-tile-options">{item.variations.length} options</span>
+                          )}
                         </button>
-                        <button
-                          type="button"
-                          className="menu-tile-add an-tap"
-                          disabled={!canOrder || soldOut || !first}
-                          onClick={() => first && addToCart(item, first.id)}
-                          aria-label={`Add ${item.name} to cart`}
-                        >
-                          +
-                        </button>
+                        {singleLine ? (
+                          <div className="menu-tile-stepper" role="group" aria-label={`${item.name} in cart`}>
+                            <button
+                              type="button"
+                              className="an-tap"
+                              onClick={() => changeQty(singleLine.variation.id, -1)}
+                              aria-label={`Remove one ${item.name}`}
+                            >
+                              −
+                            </button>
+                            <span>{singleLine.quantity} in cart</span>
+                            <button
+                              type="button"
+                              className="an-tap"
+                              onClick={() => addToCart(item, singleLine.variation.id)}
+                              disabled={!canOrder || singleLine.quantity >= 20}
+                              aria-label={`Add another ${item.name}`}
+                            >
+                              +
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="menu-tile-add an-tap"
+                            disabled={!canOrder || soldOut || !first}
+                            onClick={() => onAddPress(item)}
+                            aria-label={hasOptions ? `Add ${item.name} to cart, choose an option` : `Add ${item.name} to cart`}
+                            aria-haspopup={hasOptions ? "dialog" : undefined}
+                          >
+                            {soldOut ? "Sold out" : inCart > 0 ? "+ Add another" : "+ Add"}
+                          </button>
+                        )}
                       </div>
                     );
                   })}
@@ -817,6 +923,15 @@ export default function OrderPanel({
           </div>
         )}
       </div>
+
+      {pickerItem && (
+        <OptionPickerSheet
+          item={pickerItem}
+          taxesById={taxesById}
+          onAdd={(variationId, qty) => addToCart(pickerItem, variationId, qty)}
+          onClose={() => setPickerItem(null)}
+        />
+      )}
     </div>
   );
 }
