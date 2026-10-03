@@ -56,12 +56,10 @@ src/components/ArenaMap.tsx       # SVG arena with heat-mapped stands, driven by
 src/components/ConcessionList.tsx # List view of stands, same live data
 src/components/OrderPanel.tsx     # Menu browse → cart → checkout for one stand; hands off to OrderTracker
 src/components/CategoryFilter.tsx # Category filter chips (food, beer, drinks, snacks)
-src/components/DemandTimeline.tsx # Demand timeline chart
 src/components/ThemeToggle.tsx    # Light/dark theme toggle
 src/lib/simulation.ts            # SimulationEngine class - time-based transaction replay with decay
 src/lib/types.ts                 # Transaction, GameData, GameIndex, HeatState interfaces
 src/lib/categories.ts            # FanCategory type and CSV category mapping (heat-map filter only)
-src/lib/demandTimeline.ts        # "Best Time to Go" analysis from transaction data
 scripts/process-data.ts          # CSV-to-JSON data pipeline (PapaParse)
 public/data/games/               # 68 game JSON files + index.json
 ```

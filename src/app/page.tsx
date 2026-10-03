@@ -7,16 +7,14 @@ import OrderPanel, { SquareClientConfig } from "@/components/OrderPanel";
 import StandCard from "@/components/StandCard";
 import { ActiveOrdersBar, OrderTrackerSheet } from "@/components/OrderTracker";
 import { CartLine } from "@/lib/square/tax";
-import BestTimeCard from "@/components/DemandTimeline";
 import {
   SimulationEngine,
   DEFAULT_CONFIG,
   SimulationConfig,
 } from "@/lib/simulation";
-import { GameData, GameIndex, HeatState, SimulationStats, Transaction } from "@/lib/types";
+import { GameData, GameIndex, HeatState, SimulationStats } from "@/lib/types";
 import { BusynessSnapshot, StandBusyness, MAX_AGE_MS } from "@/lib/square/busyness";
 import { FanCategory, getDataCategories, getActiveLocations } from "@/lib/categories";
-import { findBestTimes } from "@/lib/demandTimeline";
 import { addTrackedOrder, dismissTrackedOrder, useTrackedOrders } from "@/lib/trackedOrders";
 
 export default function Home() {
@@ -45,7 +43,6 @@ export default function Home() {
   const trackedOrders = useTrackedOrders();
   const [trackerOrderId, setTrackerOrderId] = useState<string | null>(null);
   const trackerOrder = trackedOrders.find((o) => o.orderId === trackerOrderId) ?? null;
-  const [txVersion, setTxVersion] = useState(0);
   // List is the default: a fan opening this at a game wants to see which
   // stands are open and what the lines look like, not an arena diagram. The
   // map is one tap away on the toggle below. (No persistence today — a
@@ -58,7 +55,6 @@ export default function Home() {
   // — a query flag would let anyone switch it on against the live URL.
   const devTools = process.env.NODE_ENV !== "production";
   const engineRef = useRef<SimulationEngine | null>(null);
-  const gameTransactions = useRef<Transaction[]>([]);
 
   const standHeatKeys = useMemo(
     () => stands.map((s) => s.heatmapKey).filter((k): k is string => k !== null),
@@ -123,22 +119,6 @@ export default function Home() {
   }
   const selectedStandHeat = selectedStand?.heatmapKey ? heatState[selectedStand.heatmapKey] || 0 : 0;
 
-  // Compute best/worst times based on selected category or vendor
-  const categoryFilter = useMemo(() => getDataCategories(selectedCategory), [selectedCategory]);
-  const bestTimeResult = useMemo(
-    () => findBestTimes(gameTransactions.current, {
-      categories: categoryFilter,
-      location: selectedStand?.heatmapKey ?? null,
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [txVersion, selectedCategory, selectedStandId]
-  );
-  const bestTimeContext = selectedStand
-    ? selectedStand.fanName ?? selectedStand.displayName
-    : selectedCategory === "all"
-      ? "any concession"
-      : selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1);
-
   useEffect(() => {
     fetch("/api/stands")
       .then((r) => r.json())
@@ -154,9 +134,6 @@ export default function Home() {
         setGameIndex(data);
         if (data.games.length > 0) {
           setSelectedDate(data.games[0].date);
-          fetch(`/data/games/${data.games[0].date}.json`)
-            .then((r) => r.json())
-            .then((gd: GameData) => { gameTransactions.current = gd.transactions; setTxVersion((v) => v + 1); });
         }
         const initial: HeatState = {};
         data.locations.forEach((loc) => (initial[loc] = 0));
@@ -236,9 +213,6 @@ export default function Home() {
 
     const response = await fetch(`/data/games/${selectedDate}.json`);
     const gameData: GameData = await response.json();
-
-    gameTransactions.current = gameData.transactions;
-    setTxVersion((v) => v + 1);
 
     const config: SimulationConfig = {
       ...DEFAULT_CONFIG,
@@ -380,10 +354,6 @@ export default function Home() {
         </div>
       )}
 
-      {bestTimeResult.bestTimes.length > 0 && (
-        <BestTimeCard result={bestTimeResult} context={bestTimeContext} />
-      )}
-
       {devTools && simTime && (
         <div className="text-center mb-4">
           <p className="text-lg font-mono" style={{ color: "var(--text-primary)" }}>{simTime}</p>
@@ -404,12 +374,7 @@ export default function Home() {
       <div className="w-full space-y-3">
         <select
           value={selectedDate}
-          onChange={(e) => {
-            setSelectedDate(e.target.value);
-            fetch(`/data/games/${e.target.value}.json`)
-              .then((r) => r.json())
-              .then((gd: GameData) => { gameTransactions.current = gd.transactions; setTxVersion((v) => v + 1); });
-          }}
+          onChange={(e) => setSelectedDate(e.target.value)}
           className="w-full rounded-lg px-4 py-3 text-sm border"
           style={{
             backgroundColor: "var(--bg-input)",
