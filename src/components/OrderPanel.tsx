@@ -628,10 +628,12 @@ export default function OrderPanel({
                           aria-label={`${item.name}, ${price ? money(price) : "price unavailable"}. View details`}
                         >
                           {item.imageUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img className="menu-tile-photo" src={item.imageUrl} alt="" loading="lazy" decoding="async" />
+                            <span className="menu-tile-photo photo-plate">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={item.imageUrl} alt="" loading="lazy" decoding="async" />
+                            </span>
                           ) : (
-                            <span className="menu-tile-photo is-placeholder" aria-hidden="true">
+                            <span className="menu-tile-photo photo-plate is-placeholder" aria-hidden="true">
                               <span className="an-display">{item.name.charAt(0)}</span>
                             </span>
                           )}

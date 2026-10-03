@@ -339,7 +339,7 @@ body {
   width: 68px;
   height: 68px;
   border-radius: 0.625rem;
-  object-fit: cover;
+  overflow: hidden;
   background: linear-gradient(145deg, #1B2742, #101B2F);
   border: 1px solid var(--border-default);
 }
@@ -481,11 +481,10 @@ body {
 }
 .menu-tile-photo {
   width: calc(100% + 1.25rem); margin-left: -0.625rem;
-  aspect-ratio: 4 / 3; object-fit: cover; display: block;
-  background: linear-gradient(145deg, #1B2742, #101B2F); margin-bottom: 0.5rem;
+  aspect-ratio: 4 / 3; margin-bottom: 0.5rem;
 }
 .menu-tile-photo.is-placeholder { display: flex; align-items: center; justify-content: center; }
-.menu-tile-photo.is-placeholder span { font-size: 1.75rem; color: var(--accent-ice); opacity: 0.5; }
+.menu-tile-photo.is-placeholder span { font-size: 1.75rem; color: var(--bg-surface); opacity: 0.3; }
 .menu-tile-name { font-size: 0.875rem; font-weight: 600; color: var(--text-primary); line-height: 1.25; }
 .menu-tile-desc {
   font-size: 0.6875rem; color: var(--text-secondary); line-height: 1.3;
@@ -622,12 +621,25 @@ body {
   font-size: 1.5rem; line-height: 1; cursor: pointer;
 }
 .item-sheet-scroll { flex: 1 1 auto; overflow-y: auto; }
-.item-sheet-photo {
-  width: 100%; aspect-ratio: 1 / 1; object-fit: cover; display: block;
-  background: linear-gradient(145deg, #1B2742, #101B2F);
-}
+.item-sheet-photo { width: 100%; aspect-ratio: 1 / 1; }
 .item-sheet-photo.is-placeholder { display: flex; align-items: center; justify-content: center; }
-.item-sheet-photo.is-placeholder span { font-size: 4rem; color: var(--accent-ice); opacity: 0.45; }
+.item-sheet-photo.is-placeholder span { font-size: 4rem; color: var(--bg-surface); opacity: 0.3; }
+
+/* Item photos. Square's are stock cut-outs on white: dropped onto a navy card
+   with object-fit: cover they read as harsh white rectangles with the food
+   cropped at the edges. So every photo sits on a light plate instead, shown
+   whole (contain, inset), and multiplied into it: the photo's white takes on
+   the plate's tone exactly, so the rectangle edge disappears and the food
+   sits on the plate. Real full-bleed photos still work, just inset. Item
+   placeholders share the plate so a menu with gaps doesn't look patchy. */
+.photo-plate {
+  display: block; overflow: hidden; isolation: isolate;
+  background: radial-gradient(ellipse at 50% 45%, #FFFFFF 0%, #EEF2F7 60%, #D8E0EA 100%);
+}
+.photo-plate > img {
+  display: block; width: 100%; height: 100%;
+  object-fit: contain; padding: 6%; mix-blend-mode: multiply;
+}
 .item-sheet-body { padding: 1rem 1.125rem 1.5rem; display: flex; flex-direction: column; gap: 0.625rem; }
 .item-sheet-name { font-size: 1.75rem; color: var(--text-primary); }
 .item-sheet-price { font-size: 1.375rem; color: var(--accent-ice); }

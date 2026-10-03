@@ -85,10 +85,12 @@ export default function ItemDetailSheet({
 
         <div className="item-sheet-scroll">
           {item.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img className="item-sheet-photo" src={item.imageUrl} alt="" decoding="async" />
+            <div className="item-sheet-photo photo-plate">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={item.imageUrl} alt="" decoding="async" />
+            </div>
           ) : (
-            <div className="item-sheet-photo is-placeholder" aria-hidden="true">
+            <div className="item-sheet-photo photo-plate is-placeholder" aria-hidden="true">
               <span className="an-display">{item.name.charAt(0)}</span>
             </div>
           )}

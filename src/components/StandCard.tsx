@@ -40,8 +40,10 @@ export default function StandCard({
       aria-label={`${name}. ${fulfillment}. ${stand.isOpen ? "Open" : "Closed"}. View menu`}
     >
       {stand.photoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img className="stand-card-photo" src={stand.photoUrl} alt="" loading="lazy" decoding="async" />
+        <span className="stand-card-photo photo-plate">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={stand.photoUrl} alt="" loading="lazy" decoding="async" />
+        </span>
       ) : (
         <span className="stand-card-photo is-placeholder" aria-hidden="true">
           <span className="stand-card-initial an-display">{name.charAt(0)}</span>
