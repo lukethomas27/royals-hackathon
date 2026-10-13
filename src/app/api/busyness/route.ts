@@ -59,12 +59,15 @@ async function writeCache(snapshot: BusynessSnapshot): Promise<void> {
 async function refresh(): Promise<BusynessSnapshot> {
   const slots = getConfiguredStandSlots();
   const openByLocation: Record<string, boolean> = {};
+  const staffByLocation: Record<string, number | null> = {};
   await Promise.all(
     slots.map(async ({ locationId }) => {
-      openByLocation[locationId] = isOrderingOpen(await getStandOrderingState(locationId));
+      const state = await getStandOrderingState(locationId);
+      openByLocation[locationId] = isOrderingOpen(state);
+      staffByLocation[locationId] = state.staffCount;
     })
   );
-  const snapshot = await computeBusyness(openByLocation);
+  const snapshot = await computeBusyness(openByLocation, { staffByLocation });
   await writeCache(snapshot);
   return snapshot;
 }

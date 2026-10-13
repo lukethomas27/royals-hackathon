@@ -26,9 +26,14 @@ import path from "path";
 export interface StandOrderingState {
   manualOverride: "open" | "closed" | null; // null = follow schedule
   scheduledCutoff: string | null; // ISO datetime, per-game close time fallback
+  /**
+   * People working the stand, as staff set it on /staff. Sticks until changed.
+   * null = never set; busyness uses the starting value in square/staffing.ts.
+   */
+  staffCount: number | null;
 }
 
-const DEFAULT_STATE: StandOrderingState = { manualOverride: null, scheduledCutoff: null };
+const DEFAULT_STATE: StandOrderingState = { manualOverride: null, scheduledCutoff: null, staffCount: null };
 
 const KV_KEY_PREFIX = "arenapulse:stand-ordering:";
 
@@ -87,11 +92,13 @@ export async function getStandOrderingState(locationId: string): Promise<StandOr
   const redis = getRedis();
   if (redis) {
     const state = await redis.get<StandOrderingState>(KV_KEY_PREFIX + locationId);
-    return state ?? DEFAULT_STATE;
+    // Spread over the defaults: records saved before a field existed (e.g.
+    // staffCount) read it as null rather than undefined.
+    return { ...DEFAULT_STATE, ...state };
   }
   assertFallbackAllowed();
   const all = readAllFromFile();
-  return all[locationId] ?? DEFAULT_STATE;
+  return { ...DEFAULT_STATE, ...all[locationId] };
 }
 
 export async function setStandOrderingState(

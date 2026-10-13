@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import ArenaMap, { MapStand } from "@/components/ArenaMap";
-import CategoryFilter from "@/components/CategoryFilter";
+import { DeliverySeat } from "@/components/SeatPromptSheet";
 import OrderPanel, { SquareClientConfig } from "@/components/OrderPanel";
 import StandCard from "@/components/StandCard";
 import { ActiveOrdersBar, OrderTrackerSheet } from "@/components/OrderTracker";
@@ -14,7 +14,6 @@ import {
 } from "@/lib/simulation";
 import { GameData, GameIndex, HeatState, SimulationStats } from "@/lib/types";
 import { BusynessSnapshot, StandBusyness, MAX_AGE_MS } from "@/lib/square/busyness";
-import { FanCategory, getDataCategories, getActiveLocations } from "@/lib/categories";
 import { addTrackedOrder, dismissTrackedOrder, useTrackedOrders } from "@/lib/trackedOrders";
 
 export default function Home() {
@@ -29,7 +28,6 @@ export default function Home() {
   const [isRunning, setIsRunning] = useState(false);
   const [stats, setStats] = useState<SimulationStats | null>(null);
   const [speed, setSpeed] = useState<number>(120);
-  const [selectedCategory, setSelectedCategory] = useState<FanCategory>("all");
   const [selectedStandId, setSelectedStandId] = useState<string | null>(null);
   // The cart lives here, not inside OrderPanel, so the sticky bar can show it
   // from the home screen. An order can only ever go to one Square location, so
@@ -48,6 +46,9 @@ export default function Home() {
   // map is one tap away on the toggle below. (No persistence today — a
   // returning visitor also lands on List.)
   const [viewMode, setViewMode] = useState<"map" | "list">("list");
+  // Fan Deck delivery seat, kept here so closing and reopening the stand (or
+  // placing a second order) doesn't ask for it again.
+  const [deliverySeat, setDeliverySeat] = useState<DeliverySeat>({ section: "", row: "", seat: "" });
   const [busyness, setBusyness] = useState<BusynessSnapshot | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
@@ -55,35 +56,6 @@ export default function Home() {
   // — a query flag would let anyone switch it on against the live URL.
   const devTools = process.env.NODE_ENV !== "production";
   const engineRef = useRef<SimulationEngine | null>(null);
-
-  const standHeatKeys = useMemo(
-    () => stands.map((s) => s.heatmapKey).filter((k): k is string => k !== null),
-    [stands]
-  );
-
-  const activeLocations = useMemo(
-    () => getActiveLocations(selectedCategory, standHeatKeys),
-    [selectedCategory, standHeatKeys]
-  );
-
-  const bestLocation = useMemo(() => {
-    if (selectedCategory === "all") return null;
-    const eligible = activeLocations;
-    if (!eligible) return null;
-    const entries = Object.entries(heatState).filter(([loc]) => eligible.has(loc));
-    if (entries.length === 0) return null;
-    const hasAnyHeat = entries.some(([, v]) => v > 0);
-    if (!hasAnyHeat) return null;
-    let minLoc = entries[0][0];
-    let minVal = entries[0][1];
-    for (const [loc, val] of entries) {
-      if (val < minVal) {
-        minLoc = loc;
-        minVal = val;
-      }
-    }
-    return minLoc;
-  }, [heatState, selectedCategory, activeLocations]);
 
   const selectedStand = stands.find((s) => s.locationId === selectedStandId) ?? null;
   const openStandCount = stands.filter((s) => s.isOpen).length;
@@ -196,14 +168,6 @@ export default function Home() {
     []
   );
 
-  const handleCategoryChange = useCallback((cat: FanCategory) => {
-    setSelectedCategory(cat);
-    const filter = getDataCategories(cat);
-    if (engineRef.current) {
-      engineRef.current.setCategoryFilter(filter);
-    }
-  }, []);
-
   const startSimulation = async () => {
     if (!selectedDate) return;
 
@@ -225,9 +189,6 @@ export default function Home() {
       config,
       handleUpdate
     );
-
-    const filter = getDataCategories(selectedCategory);
-    engine.setCategoryFilter(filter);
 
     engineRef.current = engine;
     setIsRunning(true);
@@ -282,8 +243,6 @@ export default function Home() {
         </span>
       </button>
 
-      <CategoryFilter selected={selectedCategory} onChange={handleCategoryChange} />
-
       <div ref={standsRef} className="an-section-head w-full">
         <h2 className="an-display">Stands</h2>
         {/* The map is secondary now: a fan lands on the cards. */}
@@ -316,8 +275,8 @@ export default function Home() {
             stands={stands}
             heatState={heatState}
             busyness={busynessByLocation}
-            activeLocations={activeLocations}
-            bestLocation={bestLocation}
+            activeLocations={null}
+            bestLocation={null}
             onNodeClick={openStand}
             stats={stats}
             inSeatSection={inSeatSection}
@@ -339,18 +298,34 @@ export default function Home() {
               Loading stands…
             </p>
           )}
-          {orderedStands.map((s) => (
-            <StandCard
-              key={s.locationId}
-              stand={s}
-              busyness={busynessByLocation[s.locationId]}
-              sells={s.sells ?? null}
-              inSeatSection={inSeatSection}
-              onOpen={openStand}
-              dim={!allClosed}
-              showMeter={!allClosed}
-            />
-          ))}
+          {/* Pickup stands and the delivery stand are listed apart, so it is
+              clear which is which before a fan opens a menu. */}
+          {[
+            { key: "pickup", title: "Pick up", sub: "Order ahead, collect at the stand", role: "pickup" },
+            { key: "in_seat", title: "Seat delivery", sub: "Brought to your seat", role: "in_seat" },
+          ].map((group) => {
+            const groupStands = orderedStands.filter((s) => s.role === group.role);
+            if (groupStands.length === 0) return null;
+            return (
+              <section key={group.key} className="stand-group" aria-labelledby={`stand-group-${group.key}`}>
+                <div className="stand-group-head">
+                  <h3 id={`stand-group-${group.key}`} className="an-label">{group.title}</h3>
+                  <span>{group.sub}</span>
+                </div>
+                {groupStands.map((s) => (
+                  <StandCard
+                    key={s.locationId}
+                    stand={s}
+                    busyness={busynessByLocation[s.locationId]}
+                    sells={s.sells ?? null}
+                    onOpen={openStand}
+                    dim={!allClosed}
+                    showMeter={!allClosed}
+                  />
+                ))}
+              </section>
+            );
+          })}
         </div>
       )}
 
@@ -474,6 +449,8 @@ export default function Home() {
           heat={selectedStandHeat}
           square={squareConfig}
           onClose={() => setSelectedStandId(null)}
+          seat={deliverySeat}
+          setSeat={setDeliverySeat}
           onOrderPlaced={(order) => {
             addTrackedOrder(order);
             setSelectedStandId(null);

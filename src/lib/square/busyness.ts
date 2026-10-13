@@ -14,7 +14,7 @@
 
 import { isSquareConfigured, squareRequest } from "./client";
 import { getConfiguredStandSlots } from "./config";
-import { tillsFor } from "./tills";
+import { staffFor } from "./staffing";
 
 /** Rolling window the live rate is measured over. */
 export const WINDOW_MINUTES = 15;
@@ -48,21 +48,23 @@ export interface BusynessSnapshot {
 }
 
 /**
- * Orders per minute PER TILL that any stand sustains when genuinely slammed —
- * one shared number, which is what makes busyness comparable across stands.
+ * Orders per minute PER PERSON WORKING that any stand sustains when genuinely
+ * slammed — one shared number, which is what makes busyness comparable across
+ * stands.
  *
- * Seeded from the highest observed per-till rate on a real game night
- * (Sep 26-27, 2026) times 1.15. The headroom keeps a normal intermission high
+ * Seeded from the highest observed per-person rate on a real game night
+ * (Sep 26-27, 2026) times 1.15, using Eventium's estimated headcounts (first
+ * recorded as "tills"; Luke confirmed on Oct 3 2026 they are people). The headroom keeps a normal intermission high
  * without pinning it, leaving room for a worse night to read worse.
  *
  * Derived from one night. Recompute once there are several game nights of
  * history; quiet days must be excluded, or the reference would sag until every
  * game read "Very busy".
  */
-const SEED_PER_TILL_REFERENCE = 1.107;
+const SEED_PER_PERSON_REFERENCE = 1.107;
 
-export function perTillReference(learned?: number): number {
-  return learned ?? SEED_PER_TILL_REFERENCE;
+export function perPersonReference(learned?: number): number {
+  return learned ?? SEED_PER_PERSON_REFERENCE;
 }
 
 /**
@@ -80,9 +82,9 @@ export function heatLabel(heat: number): string {
 /**
  * Busyness from order rate and serving capacity.
  *
- * Dividing by tills is what lets two stands be compared: Concession 1 takes
- * nearly double anyone else's orders at intermission but runs the most tills,
- * so per till it is the LEAST pressed — the opposite of what raw rate says,
+ * Dividing by people working is what lets two stands be compared: Concession 1
+ * takes nearly double anyone else's orders at intermission but has the most
+ * people on, so per person it is the LEAST pressed — the opposite of what raw rate says,
  * and the answer a fan deciding where to walk actually needs.
  */
 /**
@@ -98,9 +100,9 @@ export function orderRate(recentCount: number, windowCount: number): number {
   return Math.min(recentCount / RECENT_WINDOW_MINUTES, windowCount / WINDOW_MINUTES);
 }
 
-export function heatFromRate(ordersPerMinute: number, tills: number, reference: number): number {
-  if (tills <= 0 || reference <= 0) return 0;
-  return Math.max(0, Math.min(1, ordersPerMinute / tills / reference));
+export function heatFromRate(ordersPerMinute: number, staff: number, reference: number): number {
+  if (staff <= 0 || reference <= 0) return 0;
+  return Math.max(0, Math.min(1, ordersPerMinute / staff / reference));
 }
 
 interface SearchOrdersResponse {
@@ -171,12 +173,20 @@ export async function fetchRecentOrderCounts(
  * Builds the snapshot a fan sees. `openByLocation` comes from the staff
  * open/close switch: a closed stand reports "Closed" and no busyness, because
  * a closed stand's order rate is zero and would otherwise read a reassuring
- * "Quiet".
+ * "Quiet". `staffByLocation` is what staff set on /staff for tonight; a stand
+ * missing from it uses its starting value (staffing.ts).
  */
 export async function computeBusyness(
   openByLocation: Record<string, boolean>,
-  learnedPerTillReference?: number,
-  now: Date = new Date()
+  {
+    staffByLocation = {},
+    learnedPerPersonReference,
+    now = new Date(),
+  }: {
+    staffByLocation?: Record<string, number | null>;
+    learnedPerPersonReference?: number;
+    now?: Date;
+  } = {}
 ): Promise<BusynessSnapshot> {
   const slots = getConfiguredStandSlots();
   const openIds = slots.map((s) => s.locationId).filter((id) => openByLocation[id]);
@@ -200,11 +210,10 @@ export async function computeBusyness(
       const c = counts[locationId];
       const perMinute = c ? orderRate(c[RECENT_WINDOW_MINUTES], c[WINDOW_MINUTES]) : 0;
       // Rounded to 2dp: enough for a colour, coarse enough that a page view
-      // cannot be read back as an order count or a till count.
+      // cannot be read back as an order count or a headcount.
+      const staff = staffFor(locationId, staffByLocation[locationId]);
       const heat =
-        Math.round(
-          heatFromRate(perMinute, tillsFor(locationId), perTillReference(learnedPerTillReference)) * 100
-        ) / 100;
+        Math.round(heatFromRate(perMinute, staff, perPersonReference(learnedPerPersonReference)) * 100) / 100;
       return { locationId, state: "live" as const, heat, label: heatLabel(heat) };
     }),
   };

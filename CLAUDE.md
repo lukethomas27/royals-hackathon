@@ -25,8 +25,8 @@ npm run dev:sandbox    # Second dev server on :3001 against the sandbox (stop :3
 Next.js 16 + React 19 + TypeScript + Tailwind v4. No test framework configured. Requires Node.js 18+.
 
 ```
-src/app/page.tsx                  # Fan-facing home: heat map/list, category filter, simulation controls
-src/app/staff/page.tsx            # Staff control surface — passcode-gated open/close + cutoff (section 6a)
+src/app/page.tsx                  # Fan-facing home: stand list (Pick up / Seat delivery groups) or map, simulation controls
+src/app/staff/page.tsx            # Staff control surface — passcode-gated open/close + cutoff (section 6a) + people working per stand
 src/app/api/stands/route.ts       # GET — live stand list (Square locations + ordering state)
 src/app/api/menu/route.ts         # GET ?locationId= — live orderable menu for one stand
 src/app/api/orders/route.ts       # POST — validates, creates the Square order, then pays it (card or promo)
@@ -34,7 +34,7 @@ src/app/api/orders/status/route.ts # GET ?ids= — live stage of the fan's order
 src/app/api/promo/route.ts        # GET ?code= — is the 100%-off test coupon valid (ORDER_PROMO_CODE)
 src/app/api/health/route.ts       # GET — non-secret readiness flags (square/redis/payments/promo)
 src/app/api/seat-config/route.ts  # GET — seat picker config (live Ordering Stations or fallback)
-src/app/api/staff/status/route.ts # GET/POST — staff open/close + cutoff, passcode-gated
+src/app/api/staff/status/route.ts # GET/POST — staff open/close + cutoff + people working, passcode-gated
 src/app/api/staff/orders/route.ts # GET — orders in the last 5/15 min per stand (all tills + app), passcode-gated, staff only
 src/lib/square/                   # All Square API integration — see STATUS.md for real-vs-stub detail
   types.ts       # Narrow typed subset of the Square API this app touches
@@ -48,18 +48,18 @@ src/lib/square/                   # All Square API integration — see STATUS.md
   promo.ts       # ORDER_PROMO_CODE validation — test-only 100% coupon
   orderStatus.ts # Fulfillment state -> Received/Preparing/Ready/Done; four-stand scoped BatchRetrieveOrders
   stations.ts    # Seat/row picker — live-read shape, unconfirmed API, see STATUS.md
+  staffing.ts    # Starting "people working" per stand; staff override it on /staff
   mock.ts        # Dev-only fallback data, used when SQUARE_ACCESS_TOKEN is unset
-src/lib/staffState.ts             # Staff open/close + cutoff persistence (dev-only, see STATUS.md)
+src/lib/staffState.ts             # Staff open/close + cutoff + people-working persistence (Redis; file fallback dev-only)
 src/lib/trackedOrders.ts          # Fan's placed orders in localStorage + polling hook + ready vibrate/chime
 src/components/OrderTracker.tsx   # Live tracker sheet (post-payment) + "Your order" bar on the home page
 src/components/ArenaMap.tsx       # SVG arena with heat-mapped stands, driven by live Stand[] data
 src/components/ConcessionList.tsx # List view of stands, same live data
 src/components/OrderPanel.tsx     # Menu browse → cart → checkout for one stand; hands off to OrderTracker
-src/components/CategoryFilter.tsx # Category filter chips (food, beer, drinks, snacks)
+src/components/SeatPromptSheet.tsx # Seat prompt that pops up on opening the delivery stand (skippable)
 src/components/ThemeToggle.tsx    # Light/dark theme toggle
 src/lib/simulation.ts            # SimulationEngine class - time-based transaction replay with decay
 src/lib/types.ts                 # Transaction, GameData, GameIndex, HeatState interfaces
-src/lib/categories.ts            # FanCategory type and CSV category mapping (heat-map filter only)
 scripts/process-data.ts          # CSV-to-JSON data pipeline (PapaParse)
 public/data/games/               # 68 game JSON files + index.json
 ```
@@ -81,39 +81,40 @@ public/data/games/               # 68 game JSON files + index.json
   follows the 15-min window as before; a stand that goes dead reaches Quiet
   ~5 min after its last sale instead of reading "Busy" for 15. Don't revert to
   a flat 15-min average: that lag was reported from the arena on Oct 3 2026.
-- **It is comparable across stands, because order rate is divided by tills:**
+- **It is comparable across stands, because order rate is divided by the
+  number of people working:**
 
   ```
-  heat = clamp( (orders/min ÷ tills) ÷ sharedPerTillReference , 0, 1 )
+  heat = clamp( (orders/min ÷ peopleWorking) ÷ sharedPerPersonReference , 0, 1 )
   ```
 
   Without that division the map lies by omission. Concession 1 takes nearly
-  double anyone else's orders at intermission but runs the most tills, so per
-  till it is the LEAST pressed stand — the opposite of what raw rate suggests,
-  and the answer a fan deciding where to walk actually needs.
-- **Till counts live in `square/tills.ts` and nowhere else.** They are
-  **Eventium's game-night estimates** (Matt Cooke, Oct 2 2026), stated as
+  double anyone else's orders at intermission but has the most people on, so
+  per person it is the LEAST pressed stand — the opposite of what raw rate
+  suggests, and the answer a fan deciding where to walk actually needs.
+- **People working is set by staff on `/staff`**, per stand, and sticks until
+  someone changes it (stored as `staffCount` with the stand's ordering state).
+  People, not tills: Luke confirmed on Oct 3 2026 that headcount reflects
+  output better (Eventium's "12" for Concession 1 is its busy-night headcount).
+- **Starting values live in `square/staffing.ts`** — used for a stand nobody
+  has set. They are Eventium's estimates (Matt Cooke, Oct 2 2026), stated as
   ranges — Concession 1: 8-12, Concession 2: 3-6, Concession 3: 3-4, Fan Deck
-  Bar: 3-6 — and we use the midpoint of each, except Concession 1 at the top of
-  its range (12): on Oct 3 2026 it read "Busy" sooner than the others for the
-  line it actually had. An on-site judgement, not a measured count. Actual staffing varies game to
-  game. **If Eventium reports the tills they ran for a specific night, that
-  file is the one place to change.**
-- Caveats worth knowing: a range treated as a constant means a stand running
-  fewer tills than its midpoint is busier than we show; and the model assumes a
-  till at one stand serves at a broadly similar pace to a till at another,
-  which a bar and a kitchen window may not.
-- The shared per-till reference is seeded from the highest observed per-till
-  rate on one game night (Sep 26-27, 2026) x 1.15. Recompute once there are
+  Bar: 3-6 — midpoints, except Concession 1 at the top of its range (12): on
+  Oct 3 2026 it read "Busy" sooner than the others for the line it had.
+- Caveat: the model assumes a person at one stand serves at a broadly similar
+  pace to a person at another, which a bar and a kitchen window may not.
+- The shared per-person reference is seeded from the highest observed
+  per-person rate on one game night (Sep 26-27, 2026) x 1.15. Recompute once there are
   several nights of history, excluding quiet days — averaging those in would
   drag it down until every game read "Very busy".
 - **No wait estimate exists, deliberately.** This account gives no queue depth
   (POS fulfillments are born COMPLETED) and no prep times (created_at ->
   closed_at is the card payment, median 2.3s). Never reintroduce a minutes
   figure derived from heat — that is what the old `Math.round(heat * 15)` was.
-- Till counts are server-side only and never appear in an API response. Order
-  counts appear in exactly one: the passcode-gated `/api/staff/orders`, shown
-  on `/staff` only. Every fan-facing route gets heat rounded to 2dp, so a page
+- Headcounts and order counts are staff-only: they appear only on the
+  passcode-gated `/api/staff/status` and `/api/staff/orders`, shown on `/staff`.
+  `/api/stands` whitelists the ordering fields it sends so `staffCount` can't
+  ride along. Every fan-facing route gets heat rounded to 2dp, so a page
   view cannot be read back as either count.
 - The simulation is kept for demos and gated on `NODE_ENV` alone. No query
   flag: anyone could add one to the live URL.

@@ -13,7 +13,6 @@ export default function StandCard({
   stand,
   busyness,
   sells,
-  inSeatSection,
   onOpen,
   dim = true,
   showMeter = true,
@@ -21,7 +20,6 @@ export default function StandCard({
   stand: MapStand;
   busyness: StandBusyness | null | undefined;
   sells: string | null;
-  inSeatSection: string;
   onOpen: (locationId: string) => void;
   /** Dim a closed stand only when there is an open one to contrast it with. */
   dim?: boolean;
@@ -30,7 +28,7 @@ export default function StandCard({
 }) {
   const name = stand.fanName ?? stand.displayName;
   const fulfillment =
-    stand.role === "in_seat" ? `Delivered to your seat · section ${inSeatSection} area` : "Pick up at the stand";
+    stand.role === "in_seat" ? "Delivery available for Fan Deck seats" : "Pick up at the stand";
 
   return (
     <button

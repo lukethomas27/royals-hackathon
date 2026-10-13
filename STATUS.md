@@ -57,6 +57,33 @@ Then run the 6-step smoke test in `HANDOFF.md` §6.
 
 ---
 
+## Update — Oct 13, 2026: staff set people working; Fan Deck seat prompt
+
+From Luke's notes after the Oct 3 game.
+
+- **People working, set on `/staff`.** Each stand card has a −/+ count of
+  people working tonight. Busyness divides order rate by it (it replaces the
+  fixed till estimate), so a stand with more people on reads less busy for the
+  same sales. It sticks until someone changes it; a stand never set uses its
+  starting value in `src/lib/square/staffing.ts` (Concession 1 12, Concession 2
+  4.5, Concession 3 3.5, Fan Deck 4.5). People rather than tills, because
+  headcount reflects output better. Stored as `staffCount` in the same Redis
+  record as open/close; `/api/stands` no longer sends that record whole, so
+  the headcount never reaches a fan. Changes reach busyness within ~30s (cache).
+- **Fan Deck seat prompt.** Opening the delivery stand (while it's open) pops
+  up "Where are you sitting?": section dropdown from Square's Ordering
+  Stations (or the 107-111 fallback), row and seat typed. "Just browsing"
+  skips it; checkout still requires a full seat and its section box is now the
+  same dropdown. The seat is kept for the visit, shown in the stand header
+  with a "Change" link, and not asked for again on reopening.
+- **Home page.** Stands are listed in two groups, "Pick up" and "Seat
+  delivery". The Fan Deck card says "Delivery available for Fan Deck seats" —
+  deliberately no other promotion. The All/Food/Beer/Drinks/Snacks chips are
+  gone from the home page (`CategoryFilter.tsx` and `categories.ts` deleted);
+  the stand menu keeps its own category chips.
+
+---
+
 ## Update — Oct 3, 2026 (game night): busyness tapers off faster
 
 Reported from the arena: Concession 1 was dead but still read "Busy", and it

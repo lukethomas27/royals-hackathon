@@ -10,11 +10,11 @@ import {
   heatFromRate,
   heatLabel,
   orderRate,
-  perTillReference,
+  perPersonReference,
   RECENT_WINDOW_MINUTES,
   WINDOW_MINUTES,
 } from "../src/lib/square/busyness";
-import { tillsFor } from "../src/lib/square/tills";
+import { defaultStaffFor } from "../src/lib/square/staffing";
 
 const STANDS: Record<string, string> = {
   "06KYFX4ZMH3XB": "Concession 1",
@@ -97,7 +97,7 @@ async function main() {
     for (const id of IDS) {
       const recent = countSince(id, at - RECENT_WINDOW_MINUTES * 60_000, at);
       const window = countSince(id, at - WINDOW_MINUTES * 60_000, at);
-      const heat = heatFromRate(orderRate(recent, window), tillsFor(id), perTillReference());
+      const heat = heatFromRate(orderRate(recent, window), defaultStaffFor(id), perPersonReference());
       const bar = "#".repeat(Math.round(heat * 20)).padEnd(20, ".");
       console.log(
         `      ${STANDS[id].padEnd(16)} ${bar} heat ${heat.toFixed(2).padStart(5)}  ${heatLabel(heat)}`

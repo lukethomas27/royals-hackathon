@@ -105,7 +105,9 @@ export async function GET() {
         fanName: fanStandName(s.locationId, s.displayName),
         sells: summaries[s.locationId]?.sells ?? null,
         photoUrl: summaries[s.locationId]?.photoUrl ?? null,
-        ordering,
+        // Whitelisted, never the whole record: staffCount (tonight's headcount)
+        // lives in the same record and is staff-only.
+        ordering: { manualOverride: ordering.manualOverride, scheduledCutoff: ordering.scheduledCutoff },
         isOpen: isOrderingOpen(ordering),
       };
     })

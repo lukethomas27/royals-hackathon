@@ -8,6 +8,7 @@ import { StandBusyness } from "@/lib/square/busyness";
 import BusynessMeter from "./BusynessMeter";
 import ItemDetailSheet from "./ItemDetailSheet";
 import OptionPickerSheet from "./OptionPickerSheet";
+import SeatPromptSheet, { DeliverySeat, isSeatComplete } from "./SeatPromptSheet";
 import { primeChime, TrackedOrder } from "@/lib/trackedOrders";
 
 // Display order for live category names (Square reporting categories).
@@ -97,6 +98,9 @@ interface OrderPanelProps {
   onClose: () => void;
   /** Paid and sent to the stand. The page takes over with the live tracker. */
   onOrderPlaced: (order: TrackedOrder) => void;
+  /** Delivery seat. Lives in the page so it survives closing the stand. */
+  seat: DeliverySeat;
+  setSeat: (seat: DeliverySeat) => void;
 }
 
 function money(cents: number): string {
@@ -126,6 +130,8 @@ export default function OrderPanel({
   square,
   onClose,
   onOrderPlaced,
+  seat,
+  setSeat,
 }: OrderPanelProps) {
   const [items, setItems] = useState<SquareCatalogItem[]>([]);
   const [taxesById, setTaxesById] = useState<Record<string, SquareCatalogTax>>({});
@@ -135,7 +141,11 @@ export default function OrderPanel({
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [seatConfig, setSeatConfig] = useState<SeatConfig | null>(null);
-  const [seat, setSeat] = useState({ section: "", row: "", seat: "" });
+  // The delivery stand asks for the seat up front, unless it is already known
+  // or the stand is closed (nothing can be ordered, so nothing to deliver).
+  const [seatPromptOpen, setSeatPromptOpen] = useState(
+    stand.role === "in_seat" && stand.isOpen && !isSeatComplete(seat)
+  );
   const [promoInput, setPromoInput] = useState("");
   const [promoApplied, setPromoApplied] = useState<string | null>(null);
   const [promoMessage, setPromoMessage] = useState<string | null>(null);
@@ -514,7 +524,23 @@ export default function OrderPanel({
           </button>
           <div className="stand-sheet-titles">
             <h2 className="an-display">{stand.fanName ?? stand.displayName}</h2>
-            <p>{stand.role === "in_seat" ? "Delivered to your seat" : "Pick up at the stand"}</p>
+            {stand.role === "in_seat" ? (
+              <p>
+                {isSeatComplete(seat)
+                  ? `To section ${seat.section}, row ${seat.row.trim()}, seat ${seat.seat.trim()}`
+                  : "Delivered to your seat"}
+                {stand.isOpen && (
+                  <>
+                    {" · "}
+                    <button type="button" className="stand-sheet-seat-link" onClick={() => setSeatPromptOpen(true)}>
+                      {isSeatComplete(seat) ? "Change" : "Set seat"}
+                    </button>
+                  </>
+                )}
+              </p>
+            ) : (
+              <p>Pick up at the stand</p>
+            )}
           </div>
           {phase === "menu" && (
             <button
@@ -797,8 +823,18 @@ export default function OrderPanel({
                   </p>
                 )}
                 <div className="grid grid-cols-3 gap-2">
-                  <input placeholder="Section" value={seat.section} onChange={(e) => setSeat({ ...seat, section: e.target.value })}
-                    className="rounded px-2 py-2 text-sm border" style={inputStyle} />
+                  <select
+                    value={seat.section}
+                    onChange={(e) => setSeat({ ...seat, section: e.target.value })}
+                    aria-label="Section"
+                    className="rounded px-2 py-2 text-sm border"
+                    style={inputStyle}
+                  >
+                    <option value="" disabled>Section</option>
+                    {seatConfig?.validSections.map((sec) => (
+                      <option key={sec} value={sec}>{sec}</option>
+                    ))}
+                  </select>
                   <input placeholder="Row" value={seat.row} onChange={(e) => setSeat({ ...seat, row: e.target.value })}
                     className="rounded px-2 py-2 text-sm border" style={inputStyle} />
                   <input placeholder="Seat" value={seat.seat} onChange={(e) => setSeat({ ...seat, seat: e.target.value })}
@@ -923,6 +959,17 @@ export default function OrderPanel({
           </div>
         )}
       </div>
+
+      {seatPromptOpen && (
+        <SeatPromptSheet
+          standName={stand.fanName ?? stand.displayName}
+          seat={seat}
+          validSections={seatConfig ? seatConfig.validSections : null}
+          unavailable={seatConfig?.mode === "unavailable"}
+          onSave={setSeat}
+          onClose={() => setSeatPromptOpen(false)}
+        />
+      )}
 
       {pickerItem && (
         <OptionPickerSheet

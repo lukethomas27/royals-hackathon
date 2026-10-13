@@ -11,7 +11,8 @@
 // few minutes (POS + app). Raw counts are staff-only — fans only ever see a
 // rounded busyness level.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { MAX_STAFF, MIN_STAFF } from "@/lib/staffingLimits";
 
 interface OrderCounts {
   asOf: string;
@@ -28,8 +29,13 @@ interface StaffStand {
   displayName: string;
   role: "pickup" | "in_seat";
   isOpen: boolean;
-  ordering: { manualOverride: "open" | "closed" | null; scheduledCutoff: string | null };
+  ordering: { manualOverride: "open" | "closed" | null; scheduledCutoff: string | null; staffCount: number | null };
+  /** Starting value used until staff set tonight's count. */
+  defaultStaff: number;
 }
+
+/** Wait for taps to settle before saving, so a run of + taps is one write. */
+const STAFF_SAVE_DELAY_MS = 600;
 
 export default function StaffPage() {
   const [passcode, setPasscode] = useState("");
@@ -69,6 +75,39 @@ export default function StaffPage() {
       body: JSON.stringify({ locationId, manualOverride }),
     });
     if (res.ok) load(passcode);
+  }
+
+  // People working: shown immediately on tap, saved once the taps settle.
+  const [staffDraft, setStaffDraft] = useState<Record<string, number>>({});
+  const [staffSaveError, setStaffSaveError] = useState<string | null>(null);
+  const staffTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  function changeStaff(s: StaffStand, delta: number) {
+    const current = staffDraft[s.locationId] ?? s.ordering.staffCount ?? Math.round(s.defaultStaff);
+    const next = Math.min(MAX_STAFF, Math.max(MIN_STAFF, current + delta));
+    setStaffDraft((d) => ({ ...d, [s.locationId]: next }));
+    clearTimeout(staffTimers.current[s.locationId]);
+    staffTimers.current[s.locationId] = setTimeout(async () => {
+      const res = await fetch("/api/staff/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-staff-passcode": passcode },
+        body: JSON.stringify({ locationId: s.locationId, staffCount: next }),
+      }).catch(() => null);
+      if (!res?.ok) {
+        setStaffSaveError(`Couldn't save people working for ${s.displayName}. Try again.`);
+        return;
+      }
+      setStaffSaveError(null);
+      await load(passcode);
+      // Drop the draft only once the saved value is on screen, so the number
+      // never flickers back to the old one.
+      setStaffDraft((d) => {
+        if (d[s.locationId] !== next) return d; // a newer tap is still pending
+        const rest = { ...d };
+        delete rest[s.locationId];
+        return rest;
+      });
+    }, STAFF_SAVE_DELAY_MS);
   }
 
   async function setCutoff(locationId: string, scheduledCutoff: string) {
@@ -151,6 +190,9 @@ export default function StaffPage() {
         </p>
 
         <OrderCountsStatus counts={orderCounts} stale={orderCountsStale} />
+        {staffSaveError && (
+          <p className="text-xs mb-4" style={{ color: "#ef4444" }}>{staffSaveError}</p>
+        )}
 
         <div className="space-y-4">
           {stands.map((s) => (
@@ -172,6 +214,12 @@ export default function StaffPage() {
               </div>
 
               <RecentOrders counts={orderCounts} locationId={s.locationId} />
+
+              <StaffCount
+                stand={s}
+                draft={staffDraft[s.locationId]}
+                onChange={(delta) => changeStaff(s, delta)}
+              />
 
               {/* Big, obvious ON/OFF — this is the control staff actually use */}
               <div className="grid grid-cols-2 gap-2 mb-3">
@@ -266,6 +314,60 @@ function RecentOrders({ counts, locationId }: { counts: OrderCounts | null; loca
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * People working this stand tonight. Busyness divides order rate by it, so a
+ * stand with more people on reads less busy for the same sales. It sticks
+ * until someone changes it; until then the starting estimate is used.
+ */
+function StaffCount({
+  stand,
+  draft,
+  onChange,
+}: {
+  stand: StaffStand;
+  draft: number | undefined;
+  onChange: (delta: number) => void;
+}) {
+  const set = draft ?? stand.ordering.staffCount;
+  const shown = set ?? stand.defaultStaff;
+  const pending = draft !== undefined && draft !== stand.ordering.staffCount;
+  return (
+    <div className="flex items-center justify-between rounded-lg px-3 py-2 mb-3" style={{ border: "1px solid var(--border-subtle)" }}>
+      <div>
+        <div className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>People working</div>
+        <div className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+          {pending ? "Saving…" : set === null ? "Estimate — tap to set tonight's count" : `Set by staff · estimate ${stand.defaultStaff}`}
+        </div>
+      </div>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => onChange(-1)}
+          disabled={shown <= MIN_STAFF}
+          className="w-11 h-11 rounded-lg text-xl font-bold"
+          style={{ backgroundColor: "var(--btn-bg)", color: "var(--btn-text)" }}
+          aria-label={`One fewer person working at ${stand.displayName}`}
+        >
+          −
+        </button>
+        <span className="w-10 text-center text-xl font-bold tabular-nums" style={{ color: "var(--text-primary)" }} aria-live="polite">
+          {shown}
+        </span>
+        <button
+          type="button"
+          onClick={() => onChange(1)}
+          disabled={shown >= MAX_STAFF}
+          className="w-11 h-11 rounded-lg text-xl font-bold"
+          style={{ backgroundColor: "var(--btn-bg)", color: "var(--btn-text)" }}
+          aria-label={`One more person working at ${stand.displayName}`}
+        >
+          +
+        </button>
+      </div>
     </div>
   );
 }
